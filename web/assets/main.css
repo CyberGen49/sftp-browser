@@ -1,0 +1,216 @@
+
+* {
+    min-width: 0px;
+    min-height: 0px;
+}
+
+.darkmuted {
+    /* Background and foreground */
+    --b0: hsl(215, 25%, 8%);
+    --b1: hsl(215, 25%, 12%);
+    --b2: hsl(215, 25%, 16%);
+    --b3: hsl(215, 25%, 20%);
+    --b4: hsl(215, 25%, 30%);
+    --b5: hsl(215, 25%, 40%);
+    --f4: hsl(215, 25%, 55%);
+    --f3: hsl(215, 25%, 70%);
+    --f2: hsl(215, 25%, 85%);
+    --f1: white;
+}
+.btn, .textbox {
+    border-radius: 8px;
+}
+.btn.iconOnly .icon {
+    margin: 0px;
+}
+.btn:focus-visible {
+    outline: 2px solid var(--f2);
+}
+.textbox,
+.textbox.textarea > textarea {
+    padding: 0px 12px;
+    padding-top: 2px;
+}
+.textbox.textarea {
+    padding: 8px 0px;
+}
+.popup {
+    border-radius: 16px;
+}
+.context {
+    border-radius: 12px;
+    padding: 4px;
+    gap: 4px;
+}
+.context > .item {
+    border-radius: 8px;
+}
+label.selectOption input[type="radio"],
+label.selectOption input[type="checkbox"] {
+    margin-top: -0.05em;
+}
+.tooltip {
+    /* padding: 6px 12px; */
+    padding: 8px 12px 5px 12px;
+    border-radius: 8px;
+}
+.toastOverlay > .toast > .body {
+    /* padding: 15px 5px; */
+    padding-top: 18px;
+}
+.popup > .body {
+    padding-top: 5px;
+}
+body {
+    --fontDefault: 'Comfortaa';
+}
+
+#main {
+    position: absolute;
+    top: 0px;
+    left: 0px;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+}
+
+#navbar {
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--b3);
+}
+
+#dirControls {
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--b3);
+}
+#dirControls .sep {
+    width: 1px;
+    height: 20px;
+    margin: 0px 5px;
+    background-color: var(--b3);
+}
+
+#files {
+    overflow-x: hidden;
+    overflow-y: auto;
+    height: 0px;
+    padding: 4px;
+    padding-top: 2px;
+    scrollbar-gutter: stable;
+}
+.fileEntry {
+    justify-content: flex-start;
+    height: 34px;
+    --bg: transparent;
+    --fg: var(--f2);
+    --bgHover: var(--b2);
+    --bgActive: var(--b3);
+    font-weight: normal;
+    text-align: left;
+}
+#files:not(.showHidden) > .fileEntry.hidden {
+    display: none;
+}
+.fileEntry > .icon {
+    color: var(--f3);
+    font-family: 'Material Symbols Filled Rounded';
+}
+.fileEntry > .nameCont .name {
+    color: var(--f1);
+}
+.fileEntry > *,
+.fileEntry > .nameCont .name {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+#fileColHeadings {
+    padding: 10px 24px 6px 24px;
+    font-weight: bold;
+    color: var(--b5);
+    font-size: 14px;
+    user-select: none;
+    overflow-y: scroll;
+    scrollbar-gutter: stable;
+}
+.fileEntry > .date,
+#fileColHeadings > .date {
+    width: 150px;
+}
+.fileEntry > .size,
+#fileColHeadings > .size {
+    width: 100px;
+}
+.fileEntry > .perms,
+#fileColHeadings > .perms {
+    width: 100px;
+}
+.fileEntry.selected {
+    --bg: var(--blue0);
+    --fg: var(--f1);
+    --bgHover: var(--blue1);
+    --bgActive: var(--blue2);
+}
+.fileEntry.selected > .icon {
+    color: var(--f1);
+}
+.fileEntry.hidden:not(.selected) > * {
+    opacity: 0.5;
+}
+.fileEntry.cut:not(.selected) {
+    opacity: 0.5;
+}
+.fileEntry.selected {
+    /*  */
+}
+.fileEntry.copied {
+    /*  */
+}
+.fileEntry.selected.copied {
+    /*  */
+}
+.notice {
+    padding: 20px;
+    color: var(--f3);
+    text-align: center;
+}
+
+#progressBar {
+    border-radius: 0px;
+    margin: 0px;
+    height: 3px;
+    display: none;
+}
+#progressBar.visible {
+    display: block;
+}
+
+#statusBar {
+    padding: 8px 10px 6px 10px;
+    font-size: 15px;
+    color: var(--f4);
+    border-top: 1px solid var(--b3);
+    line-height: 1.2;
+}
+#statusBar.error {
+    color: var(--red2);
+}
+
+#connectionManager .entry {
+    gap: 5px 20px;
+}
+#connectionManager .entry > .row > .icon {
+    font-family: 'Material Symbols Outlined Rounded';
+    font-size: 32px;
+    color: var(--f3);
+    user-select: none;
+}
+
+.moveFilesPicker .folders {
+    border-radius: 12px;
+    padding: 4px;
+    gap: 2px;
+    border: 1px solid var(--b3);
+    height: 300px;
+    overflow-y: auto;
+}

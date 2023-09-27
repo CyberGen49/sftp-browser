@@ -1,0 +1,18 @@
+{
+    "id": "/",
+    "start_url": "/",
+    "scope": "/",
+    "name": "SFTP Browser",
+    "short_name": "SFTP",
+    "description": "Manage files on your SFTP server with ease!",
+    "categories": [ "utilities", "productivity" ],
+    "icons": [{
+        "src": "/icon.png",
+        "size": "256x256",
+        "type": "image/png",
+        "purpose": "maskable any"
+    }],
+    "background_color": "#1f2733",
+    "theme_color": "#1f2733",
+    "display": "standalone"
+}
