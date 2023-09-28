@@ -561,6 +561,21 @@ const loadDirectory = async path => {
         const dateRelative = file.modifyTime ? getRelativeDate(file.modifyTime) : '-';
         const dateAbsolute = file.modifyTime ? dayjs(file.modifyTime).format('MMM D, YYYY, h:mm A') : null;
         const perms = file.longname.split(' ')[0].replace(/\*/g, '');
+        const permsNum = (() => {
+            let temp;
+            let str = '';
+            const user = perms.substring(1, 4);
+            const group = perms.substring(4, 7);
+            const other = perms.substring(7, 10);
+            for (const perm of [user, group, other]) {
+                temp = 0;
+                if (perm.includes('r')) temp += 1;
+                if (perm.includes('w')) temp += 2;
+                if (perm.includes('x')) temp += 4;
+                str += temp;
+            }
+            return str;
+        })();
         // Build the HTML
         elFile.innerHTML = /*html*/`
             <div class="icon flex-no-shrink">${icon}</div>
@@ -569,7 +584,7 @@ const loadDirectory = async path => {
             </div>
             <div class="date flex-no-shrink" ${dateAbsolute ? `title="${dateAbsolute}"`:''}>${dateRelative}</div>
             <div class="size flex-no-shrink">${sizeFormatted}</div>
-            <div class="perms flex-no-shrink">${perms}</div>
+            <div class="perms flex-no-shrink" title="${permsNum}">${perms}</div>
         `;
         // Handle clicks on the file element
         let lastClick = 0;
