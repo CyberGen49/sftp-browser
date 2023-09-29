@@ -33,8 +33,10 @@ let sortDesc = window.localStorage.getItem('sortDesc');
 sortDesc = (sortDesc == null) ? false : (sortDesc === 'true')
 let showHidden = window.localStorage.getItem('showHidden');
 showHidden = (showHidden == null) ? true : (showHidden === 'true');
+let viewMode = window.localStorage.getItem('viewMode') || 'list';
 let isUploading = false;
 let lastSelectedIndex = -1;
+let fileDoubleClickLock = false;
 
 // GPT-4-generated function to check if two HTML elements overlap
 function doElementsOverlap(el1, el2) {
@@ -47,6 +49,12 @@ function doElementsOverlap(el1, el2) {
                     rect1.top > rect2.bottom);
 
     return overlap;
+}
+
+const getIsMobileDevice = () => {
+    const isPointerCoarse = window.matchMedia('(pointer: coarse)').matches;
+    const isHoverNone = window.matchMedia('(hover: none)').matches;
+    return isPointerCoarse && isHoverNone;
 }
 
 const getHeaders = () => {
@@ -493,7 +501,7 @@ const loadDirectory = async path => {
     btnDirCreate.disabled = true;
     btnDownload.disabled = true;
     btnSort.disabled = true;
-    // Get a directory listing
+    // Get the directory listing
     setStatus(`Loading directory...`);
     const data = await api.get('directories/list', { path: path });
     // If an error occurred, update the status bar
@@ -528,144 +536,16 @@ const loadDirectory = async path => {
     }
     // Combine the file list and add the ".." directory
     const list = [{
-        unselectable: true,
         name: '..',
         type: 'd',
         longname: '-'
     }, ...onlyDirs, ...onlyFiles];
     // Loop through the list and create file elements
-    let fileSelectLocked = false;
     let i = 0;
     for (const file of list) {
-        const elFile = document.createElement('button');
-        elFile.classList = 'btn fileEntry row gap-10';
-        // If the file is "hidden", give it the class
-        if (file.name != '..' && file.name.substring(0, 1) === '.') {
-            elFile.classList.add('hidden');
-        }
-        // Add data attributes to the file element
-        elFile.dataset.path = `${data.path}/${file.name}`;
-        elFile.dataset.type = file.type;
-        elFile.dataset.name = file.name;
+        const elFile = getFileEntryElement(file, path);
         elFile.dataset.index = i;
         i++;
-        // Get some formatted file info
-        let icon = 'insert_drive_file';
-        if (file.type == 'd') icon = 'folder';
-        if (file.type == 'l') icon = 'file_present';
-        if (file.type == 'b') icon = 'save';
-        if (file.type == 'p') icon = 'filter_alt';
-        if (file.type == 'c') icon = 'output';
-        if (file.type == 's') icon = 'wifi';
-        const sizeFormatted = (file.size && file.type !== 'd') ? formatSize(file.size) : '-';
-        const dateRelative = file.modifyTime ? getRelativeDate(file.modifyTime) : '-';
-        const dateAbsolute = file.modifyTime ? dayjs(file.modifyTime).format('MMM D, YYYY, h:mm A') : null;
-        const perms = file.longname.split(' ')[0].replace(/\*/g, '');
-        const permsNum = (() => {
-            let temp;
-            let str = '';
-            const user = perms.substring(1, 4);
-            const group = perms.substring(4, 7);
-            const other = perms.substring(7, 10);
-            for (const perm of [user, group, other]) {
-                temp = 0;
-                if (perm.includes('r')) temp += 1;
-                if (perm.includes('w')) temp += 2;
-                if (perm.includes('x')) temp += 4;
-                str += temp;
-            }
-            return str;
-        })();
-        // Build the HTML
-        elFile.innerHTML = /*html*/`
-            <div class="icon flex-no-shrink">${icon}</div>
-            <div class="nameCont col gap-5 flex-grow">
-                <div class="name"><span title="${file.name}">${file.name}</span></div>
-            </div>
-            <div class="date flex-no-shrink" ${dateAbsolute ? `title="${dateAbsolute}"`:''}>${dateRelative}</div>
-            <div class="size flex-no-shrink">${sizeFormatted}</div>
-            <div class="perms flex-no-shrink" title="${permsNum}">${perms}</div>
-        `;
-        // Handle clicks on the file element
-        let lastClick = 0;
-        elFile.addEventListener('click', e => {
-            e.stopPropagation();
-            // If the control key isn't held
-            if (!e.ctrlKey) {
-                // If this is a double-click
-                if ((Date.now()-lastClick) < 300) {
-                    if (fileSelectLocked) return;
-                    // Handle file loading accordingly
-                    if (file.type !== 'd') {
-                        loadFile(elFile.dataset.path);
-                    } else {
-                        // Lock file selection to prevent double-clicking
-                        // during load and clear forward history
-                        fileSelectLocked = true;
-                        forwardPaths = [];
-                        changePath(elFile.dataset.path);
-                    }
-                }
-            }
-            // Update our last click time
-            lastClick = Date.now();
-            // Return if unselectable
-            if (file.unselectable) return;
-            // Handle selection
-            if (e.shiftKey && lastSelectedIndex >= 0) {
-                // Select all files between the last selected file and this one
-                // Based on this file's index and lastSelectedIndex
-                const files = [...$$('#files .fileEntry', elFiles)];
-                const start = Math.min(lastSelectedIndex, parseInt(elFile.dataset.index));
-                const end = Math.max(lastSelectedIndex, parseInt(elFile.dataset.index));
-                for (let j = start; j <= end; j++) {
-                    const el = files[j];
-                    selectFile(el.dataset.path, false, false, false);
-                }
-            } else {
-                // Update selection based on shift and ctrl key state
-                const state = e.shiftKey || e.ctrlKey;
-                selectFile(elFile.dataset.path, !state, state);
-            }
-        });
-        // Handle keypresses on the file element
-        elFile.addEventListener('keydown', e => {
-            // If the enter key is pressed
-            if (e.code === 'Enter') {
-                // Handle file loading accordingly
-                if (file.type !== 'd') {
-                    loadFile(elFile.dataset.path);
-                } else {
-                    changePath(elFile.dataset.path);
-                }
-            }
-            // Focus the next file
-            if (e.code == 'ArrowDown') {
-                e.preventDefault();
-                const next = elFile.nextElementSibling;
-                if (next) next.focus();
-            }
-            // Focus the previous file
-            if (e.code == 'ArrowUp') {
-                e.preventDefault();
-                const prev = elFile.previousElementSibling;
-                if (prev) prev.focus();
-            }
-            // If the escape key is pressed, deselect all files
-            if (e.code === 'Escape') {
-                deselectAllFiles();
-            }
-            // Return if unselectable
-            if (file.unselectable) return;
-            // If the spacebar is pressed
-            if (e.code === 'Space') {
-                // Prevent scrolling
-                e.preventDefault();
-                // Update selection based on ctrl key state
-                if (!file.unselectable)
-                    selectFile(elFile.dataset.path, !e.ctrlKey, true);
-            }
-        });
         // Add the file element to the file list
         elFiles.appendChild(elFile);
     }
@@ -675,9 +555,246 @@ const loadDirectory = async path => {
         btnDirCreate.disabled = false;
         btnDownload.disabled = false;
         btnSort.disabled = false;
+        fileDoubleClickLock = false;
         updateDirControls();
         setStatus(`Loaded directory with ${list.length} items in ${Date.now()-loadStartTime}ms`);
     }
+}
+
+const getFileEntryElement = (file, path) => {
+    const elFile = document.createElement('button');
+    elFile.classList = 'btn fileEntry row gap-10';
+    // If the file is "hidden", give it the class
+    if (file.name != '..' && file.name.substring(0, 1) === '.') {
+        elFile.classList.add('hidden');
+    }
+    // Add data attributes to the file element
+    elFile.dataset.path = `${path}/${file.name}`;
+    elFile.dataset.type = file.type;
+    elFile.dataset.name = file.name;
+    elFile.dataset.size = file.size;
+    // Get icon
+    let icon = 'insert_drive_file';
+    if (file.type == 'd') icon = 'folder';
+    if (file.type == 'l') icon = 'file_present';
+    if (file.type == 'b') icon = 'save';
+    if (file.type == 'p') icon = 'filter_alt';
+    if (file.type == 'c') icon = 'output';
+    if (file.type == 's') icon = 'wifi';
+    // Get formatted file info
+    const sizeFormatted = (file.size && file.type !== 'd') ? formatSize(file.size) : '-';
+    const dateRelative = file.modifyTime ? getRelativeDate(file.modifyTime) : '-';
+    const dateAbsolute = file.modifyTime ? dayjs(file.modifyTime).format('MMM D, YYYY, h:mm A') : null;
+    const perms = file.longname.split(' ')[0].replace(/\*/g, '');
+    const permsNum = (() => {
+        let temp;
+        let str = '';
+        const user = perms.substring(1, 4);
+        const group = perms.substring(4, 7);
+        const other = perms.substring(7, 10);
+        for (const perm of [user, group, other]) {
+            temp = 0;
+            if (perm.includes('r')) temp += 1;
+            if (perm.includes('w')) temp += 2;
+            if (perm.includes('x')) temp += 4;
+            str += temp;
+        }
+        return str;
+    })();
+    // Build the HTML
+    elFile.innerHTML = /*html*/`
+        <div class="icon flex-no-shrink">${icon}</div>
+        <div class="nameCont col gap-2 flex-grow">
+            <div class="name"><span title="${file.name}">${file.name}</span></div>
+            <div class="lower">
+                <span class="date">${dateRelative}</span>
+                •
+                <span class="size">${sizeFormatted}</span>
+            </div>
+        </div>
+        <div class="date flex-no-shrink" ${dateAbsolute ? `title="${dateAbsolute}"`:''}>${dateRelative}</div>
+        <div class="size flex-no-shrink">${sizeFormatted}</div>
+        <div class="perms flex-no-shrink" title="${permsNum}">${perms}</div>
+    `;
+    // Handle clicks on the file element
+    let lastClick = 0;
+    elFile.addEventListener('click', e => {
+        e.stopPropagation();
+        // If the control key isn't held
+        if (!e.ctrlKey) {
+            // If this is a double-click
+            if ((Date.now()-lastClick) < 300) {
+                if (fileDoubleClickLock) return;
+                // Handle file loading accordingly
+                if (file.type !== 'd') {
+                    loadFile(elFile.dataset.path);
+                } else {
+                    // Lock file selection to prevent double-clicking during load
+                    fileDoubleClickLock = true;
+                    // Clear forward history and change paths
+                    forwardPaths = [];
+                    changePath(elFile.dataset.path);
+                }
+            }
+        }
+        // Update our last click time
+        lastClick = Date.now();
+        // Return if ..
+        if (file.name == '..') return;
+        // Handle selection
+        if (e.shiftKey && lastSelectedIndex >= 0) {
+            // Select all files between the last selected file and this one
+            // based on this file's index and lastSelectedIndex
+            const files = [...$$('#files .fileEntry', elFiles)];
+            const start = Math.min(lastSelectedIndex, parseInt(elFile.dataset.index));
+            const end = Math.max(lastSelectedIndex, parseInt(elFile.dataset.index));
+            for (let j = start; j <= end; j++) {
+                const el = files[j];
+                selectFile(el.dataset.path, false, false, false);
+            }
+        } else {
+            // Update selection based on shift and ctrl key state
+            const state = e.shiftKey || e.ctrlKey;
+            selectFile(elFile.dataset.path, !state, state);
+        }
+    });
+    // Handle keypresses on the file element
+    elFile.addEventListener('keydown', e => {
+        // If the enter key is pressed
+        if (e.code === 'Enter') {
+            // Handle file loading accordingly
+            if (file.type !== 'd') {
+                loadFile(elFile.dataset.path);
+            } else {
+                changePath(elFile.dataset.path);
+            }
+        }
+        // Focus the next file
+        if (e.code == 'ArrowDown') {
+            e.preventDefault();
+            const next = elFile.nextElementSibling;
+            if (next) next.focus();
+        }
+        // Focus the previous file
+        if (e.code == 'ArrowUp') {
+            e.preventDefault();
+            const prev = elFile.previousElementSibling;
+            if (prev) prev.focus();
+        }
+        // If the escape key is pressed, deselect all files
+        if (e.code === 'Escape') {
+            deselectAllFiles();
+        }
+        // Return if ..
+        if (file.name == '..') return;
+        // If the spacebar is pressed
+        if (e.code === 'Space') {
+            // Prevent scrolling
+            e.preventDefault();
+            // Update selection based on ctrl key state
+            if (file.name != '..')
+                selectFile(elFile.dataset.path, !e.ctrlKey, true);
+        }
+    });
+    // Handle right-clicks on the file element
+    elFile.addEventListener('contextmenu', e => {
+        e.preventDefault();
+        e.stopPropagation();
+        // If the file is already selected, don't change selection
+        if (!elFile.classList.contains('selected')) {
+            selectFile(elFile.dataset.path, true, true);
+        }
+        fileContextMenu();
+    });
+    return elFile;
+}
+
+const fileContextMenu = () => {
+    const selected = getSelectedFiles();
+    // We have to delay button clicks to allow time for
+    // the context menu to lose focus trap
+    const clickButton = btn => setTimeout(() => btn.click(), 100);
+    // Selection status shortcuts
+    const isNoneSelected = selected.length == 0;
+    const isSomeSelected = selected.length > 0;
+    const isSingleSelected = selected.length == 1;
+    const isMultiSelected = selected.length > 1;
+    // Build the menu
+    const menu = new ContextMenuBuilder();
+    if (isNoneSelected) menu.addItem(item => {
+        item.setIcon($('.icon', btnUpload).innerText)
+            .setLabel('Upload files...')
+            .setClickHandler(() => clickButton(btnUpload))
+        btnUpload.disabled ? item.disable() : item.enable();
+        return item;
+    });
+    if (isNoneSelected) menu.addItem(item => {
+        item.setIcon($('.icon', btnDirCreate).innerText)
+            .setLabel('New folder...')
+            .setClickHandler(() => clickButton(btnDirCreate))
+        btnDirCreate.disabled ? item.disable() : item.enable();
+        return item;
+    });
+    if (isNoneSelected) menu.addSeparator();
+    if (!btnSelectionCut.disabled) menu.addItem(item => {
+        item.setIcon($('.icon', btnSelectionCut).innerText)
+            .setLabel(`Cut`)
+            .setClickHandler(() => clickButton(btnSelectionCut))
+        return item;
+    });
+    if (!btnSelectionCopy.disabled) menu.addItem(item => {
+        item.setIcon($('.icon', btnSelectionCopy).innerText)
+            .setLabel(`Copy`)
+            .setClickHandler(() => clickButton(btnSelectionCopy))
+        return item;
+    });
+    if (isNoneSelected) menu.addItem(item => {
+        item.setIcon($('.icon', btnSelectionPaste).innerText)
+            .setLabel(`Paste`)
+            .setClickHandler(() => clickButton(btnSelectionPaste))
+        btnSelectionPaste.disabled ? item.disable() : item.enable();
+        return item;
+    });
+    if (isSomeSelected) menu.addSeparator();
+    if (!btnRename.disabled) menu.addItem(item => {
+        item.setIcon($('.icon', btnRename).innerText)
+            .setLabel('Rename...')
+            .setClickHandler(() => clickButton(btnRename))
+        return item;
+    });
+    if (!btnSelectionMove.disabled) menu.addItem(item => {
+        item.setIcon($('.icon', btnSelectionMove).innerText)
+            .setLabel(`Move...`)
+            .setClickHandler(() => clickButton(btnSelectionMove))
+        return item;
+    });
+    if (!btnSelectionDelete.disabled) menu.addItem(item => {
+        item.setIcon($('.icon', btnSelectionDelete).innerText)
+            .setLabel(`Delete...`)
+            .setClickHandler(() => clickButton(btnSelectionDelete))
+            .setIsDanger(true)
+        return item;
+    });
+    menu.addSeparator();
+    menu.addItem(item => {
+        item.setIcon('download')
+            .setLabel(`Download`)
+            .setClickHandler(() => clickButton(btnDownload))
+        btnDownload.disabled ? item.disable() : item.enable();
+        return item;
+    });
+    if (!isMultiSelected) menu.addSeparator();
+    if (!isMultiSelected) menu.addItem(item => {
+        item.setIcon('conversion_path')
+            .setLabel('Copy path')
+            .setClickHandler(() => {
+                const path = isNoneSelected ? activeConnection.path : selected[0].dataset.path;
+                navigator.clipboard.writeText(path);
+                setStatus(`Copied path to clipboard`);
+            })
+        return item;
+    });
+    menu.showAtCursor();
 }
 
 const loadFile = async path => {
@@ -990,6 +1107,48 @@ const moveFilesDialog = async() => {
     moveFiles(newDirPath, selected);
 }
 
+const copyFiles = async(newDirPath, filePaths) => {
+    // Loop through selected files
+    const newPaths = [];
+    let i = 0;
+    let replaceStatus = null;
+    for (const pathSource of filePaths) {
+        const name = pathSource.split('/').pop();
+        const pathDest = `${newDirPath}/${name}`;
+        if (pathSource == pathDest) continue;
+        setStatus(`Copying file: ${pathSource}`, false, Math.round((i/filePaths.length)*100));
+        i++;
+        // Check if the new path exists
+        // If it does, prompt the user to replace it
+        const resExistsCheck = await api.get('files/exists', { path: pathDest });
+        if (resExistsCheck.exists) {
+            if (replaceStatus != 'replaceAll') {
+                if (replaceStatus != 'skipAll') {
+                    replaceStatus = await replaceDialog(pathDest);
+                }
+                if (replaceStatus == 'skip' || replaceStatus == 'skipAll') {
+                    setStatus(`File copy skipped`);
+                    continue;
+                }
+            }
+            await deleteFile(pathDest, false);
+        }
+        const data = await api.put('files/copy', {
+            pathSrc: pathSource, pathDest: pathDest
+        });
+        if (data.error) {
+            setStatus(`Error: ${data.error}`, true);
+            return false;
+        }
+        newPaths.push(data.pathDest);
+    }
+    if (newPaths.length > 0) {
+        setStatus(`Copied ${newPaths.length} file(s) to ${newDirPath}`);
+        return newPaths;
+    }
+    return false;
+}
+
 const replaceDialog = path => new Promise(resolve => {
     const el = document.createElement('div');
     el.innerHTML = `
@@ -1213,11 +1372,11 @@ btnSelectionCopy.addEventListener('click', () => {
     updateDirControls();
 });
 btnSelectionPaste.addEventListener('click', async() => {
+    const newDirPath = activeConnection.path;
+    if (!newDirPath) return;
     // Move files
     let newPaths = true;
     if (isClipboardCut) {
-        const newDirPath = activeConnection.path;
-        if (!newDirPath) return;
         // Move the files
         newPaths = await moveFiles(newDirPath, selectionClipboard);
         if (!newPaths) return;
@@ -1225,7 +1384,9 @@ btnSelectionPaste.addEventListener('click', async() => {
         selectionClipboard = [];
     // Copy files
     } else {
-        return setStatus(`Can't copy files yet!`, true);
+        // Copy the files
+        newPaths = await copyFiles(newDirPath, selectionClipboard);
+        if (!newPaths) return;
     }
     // Reload directory
     await changePath();
@@ -1376,6 +1537,12 @@ elFiles.addEventListener('drop', e => {
         }
     }
     uploadFiles(files);
+});
+
+elFiles.addEventListener('contextmenu', e => {
+    e.preventDefault();
+    deselectAllFiles();
+    fileContextMenu();
 });
 
 window.addEventListener('click', e => {

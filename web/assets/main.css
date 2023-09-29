@@ -118,8 +118,12 @@ body {
 .fileEntry > .nameCont .name {
     color: var(--f1);
 }
-.fileEntry > *,
-.fileEntry > .nameCont .name {
+.fileEntry > .nameCont .lower {
+    display: none;
+    font-size: 14px;
+    color: var(--f3);
+}
+.fileEntry * {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;

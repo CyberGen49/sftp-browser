@@ -193,6 +193,20 @@ srv.put('/api/sftp/files/move', async(req, res) => {
         res.sendError(error);
     }
 });
+srv.put('/api/sftp/files/copy', async(req, res) => {
+    /** @type {sftp} */
+    const session = req.session;
+    res.data.pathSrc = normalizeRemotePath(req.query.pathSrc);
+    res.data.pathDest = normalizeRemotePath(req.query.pathDest);
+    if (!res.data.pathSrc) return res.sendError('Missing source path', 400);
+    if (!res.data.pathDest) return res.sendError('Missing destination path', 400);
+    try {
+        await session.rcopy(res.data.pathSrc, res.data.pathDest);
+        res.sendData();
+    } catch (error) {
+        res.sendError(error);
+    }
+});
 srv.get('/api/sftp/files/stat', async(req, res) => {
     /** @type {sftp} */
     const session = req.session;
@@ -261,8 +275,9 @@ const downloadMultiFileHandler = async(connectionOpts, res, remotePaths, rootPat
             sessionActivity[hash] = Date.now();
         }, 1000*1);
         // Set response headers
-        let fileName = 'files';
-        if (remotePaths.length == 1) fileName = path.basename(remotePaths[0]);
+        let fileName = `Files (${path.basename(rootPath) || 'Root'})`;
+        if (remotePaths.length == 1)
+            fileName = path.basename(remotePaths[0]);
         res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(fileName)}.zip"`);
         // Create the archive and start piping to the response
         const archive = archiver('zip');
