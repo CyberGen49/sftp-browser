@@ -18,6 +18,9 @@ self.addEventListener('fetch', (e) => {
             }
             // Return the response
             return res;
+        }).catch(e => {
+            console.error(e);
+            return match;
         });
         // Return the cached resource if it exists
         // Otherwise, return the network request

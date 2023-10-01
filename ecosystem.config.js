@@ -1,7 +1,7 @@
 
 module.exports = {
     apps: [{
-        name: 'webftp',
+        name: 'sftp-browser',
         script: './server.js',
         watch: [ 'server.js' ]
     }]

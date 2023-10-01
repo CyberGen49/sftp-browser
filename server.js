@@ -9,9 +9,12 @@ const mime = require('mime');
 const bodyParser = require('body-parser');
 const archiver = require('archiver');
 const rawBodyParser = bodyParser.raw({
-    limit: '64mb',
+    limit: '16mb',
     type: '*/*'
 });
+const dayjs = require('dayjs');
+const dayjsAdvancedFormat = require('dayjs/plugin/advancedFormat');
+dayjs.extend(dayjsAdvancedFormat);
 const utils = require('web-resources');
 
 const normalizeRemotePath = remotePath => {
@@ -365,11 +368,12 @@ srv.get('/api/sftp/files/get/single/url', async(req, res) => {
         return res.sendError(error);
     }
     // Generate download URL
-    const id = Date.now();
+    const id = utils.randomHex(8);
     res.data.download_url = `https://${req.get('host')}/dl/${id}`;
     // Create download handler
     rawDownloads[id] = {
         created: Date.now(),
+        paths: [ res.data.path ],
         handler: async(req2, res2) => {
             // Handle the download
             await downloadSingleFileHandler(req.connectionOpts, res2, res.data.path, stats);
@@ -386,11 +390,13 @@ srv.get('/api/sftp/files/get/multi/url', async(req, res) => {
         return res.sendError(error);
     }
     // Generate download URL
-    const id = Date.now();
+    const id = utils.randomHex(8);
     res.data.download_url = `https://${req.get('host')}/dl/${id}`;
     // Create download handler
     rawDownloads[id] = {
         created: Date.now(),
+        paths: res.data.paths,
+        isZip: true,
         handler: async(req2, res2) => {
             // Handle the download
             await downloadMultiFileHandler(req.connectionOpts, res2, res.data.paths, req.query.rootPath);
@@ -399,9 +405,32 @@ srv.get('/api/sftp/files/get/multi/url', async(req, res) => {
     res.sendData();
 });
 srv.get('/dl/:id', async(req, res) => {
-    const handler = rawDownloads[req.params.id]?.handler;
-    if (!handler) return res.status(404).end();
-    handler(req, res);
+    // Get the download handler
+    const entry = rawDownloads[req.params.id];
+    if (!entry) return res.status(404).end();
+    // If the user agent looks like a bot
+    if (req.get('user-agent').match(/(bot|scrape)/)) {
+        // Send some HTML
+        res.setHeader('Content-Type', 'text/html');
+        const html = /*html*/`
+            <html>
+                <head>
+                    <title>Download shared files</title>
+                    <meta property="og:site_name" content="SFTP Browser" />
+                    <meta property="og:title" content="Shared ${entry.isZip ? 'files':'file'}" />
+                    <meta property="og:description" content="Click to download ${entry.isZip ? `these files compressed into a zip.`:`${path.basename(entry.paths[0])}.`} This link will expire on ${dayjs(entry.created+(1000*60*60*24)).format('YYYY-MM-DD [at] hh:mm:ss ([GMT]Z)')}." />
+                    <meta name="theme-color" content="#1f2733">
+                    <meta property="og:image" content="https://${req.get('host')}/icon.png" />
+                </head>
+                <body>
+                    <p>Click <a href="${req.originalUrl}">here</a> to download the file.</p>
+                </body>
+            </html>
+        `;
+        res.send(html);
+    } else {
+        entry.handler(req, res);
+    }
 });
 
 srv.use((req, res) => res.status(404).end());
@@ -424,7 +453,7 @@ setInterval(() => {
     // Delete unused downloads
     for (const id in rawDownloads) {
         const download = rawDownloads[id];
-        if ((Date.now()-download.created) > 1000*60*60) {
+        if ((Date.now()-download.created) > 1000*60*60*12) {
             console.log(`Deleting unused download`);
             delete rawDownloads[id];
         }

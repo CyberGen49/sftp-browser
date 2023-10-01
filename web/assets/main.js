@@ -4,23 +4,28 @@ const btnNavBack = $('#navBack');
 const btnNavForward = $('#navForward');
 const inputNavPath = $('#inputNavPath');
 const btnGo = $('#pathGo');
+const btnPathPopup = $('#pathPopup');
 const elBelowNavBar = $('#belowNavBar');
+const btnDirMenu = $('#dirMenu');
 const btnUpload = $('#upload');
 const btnDirCreate = $('#dirCreate');
 const btnSelectionCut = $('#fileCut');
 const btnSelectionCopy = $('#fileCopy');
 const btnSelectionPaste = $('#filePaste');
 const btnRename = $('#fileRename');
-const btnSelectionMove = $('#fileMove');
+const btnSelectionMoveTo = $('#fileMoveTo');
+const btnSelectionCopyTo = $('#fileCopyTo');
 const btnSelectionDelete = $('#fileDelete');
 const btnDownload = $('#fileDownload');
-const btnToggleHidden = $('#toggleHidden');
-const btnSort = $('#dirSort');
-const btnManageSelection = $('#dirSelection');
+const btnShare = $('#fileShare');
+const btnDirSort = $('#dirSort');
+const btnDirView = $('#dirView');
+const elFileColHeadings = $('#fileColHeadings');
 const elFiles = $('#files');
 const elProgressBar = $('#progressBar');
 const elStatusBar = $('#statusBar');
 const log = [];
+const forceTileViewWidth = 720;
 let activeConnection = null;
 let activeConnectionId = null;
 let backPaths = [];
@@ -36,7 +41,7 @@ showHidden = (showHidden == null) ? true : (showHidden === 'true');
 let viewMode = window.localStorage.getItem('viewMode') || 'list';
 let isUploading = false;
 let lastSelectedIndex = -1;
-let fileDoubleClickLock = false;
+let fileAccessLock = false;
 
 // GPT-4-generated function to check if two HTML elements overlap
 function doElementsOverlap(el1, el2) {
@@ -281,25 +286,25 @@ const editConnectionDialog = async (id) => new Promise(resolve => {
     const el = document.createElement('div');
     el.classList = 'col gap-10';
     el.innerHTML = /*html*/`
-        <div style="width: 300px">
+        <div style="width: 300px; max-width: 100%">
             <label>Friendly name</label>
             <input type="text" class="textbox" id="inputName" value="${connection.name}" placeholder="My Server">
         </div>
         <div class="row gap-10 flex-wrap">
-            <div style="width: 300px">
+            <div style="width: 300px; max-width: 100%">
                 <label>Host</label>
                 <input type="text" class="textbox" id="inputHost" value="${connection.host}" placeholder="example.com">
             </div>
-            <div style="width: 120px">
+            <div style="width: 120px; max-width: 100%">
                 <label>Port</label>
                 <input type="number" class="textbox" id="inputPort" value="${connection.port}" placeholder="22">
             </div>
         </div>
-        <div style="width: 200px">
+        <div style="width: 200px; max-width: 100%">
             <label>Username</label>
             <input type="text" class="textbox" id="inputUsername" value="${connection.username}" placeholder="kayla">
         </div>
-        <div style="width: 300px">
+        <div style="width: 300px; max-width: 100%">
             <label>Authentication</label>
             <div class="row gap-10 flex-wrap">
                 <label class="selectOption">
@@ -312,11 +317,11 @@ const editConnectionDialog = async (id) => new Promise(resolve => {
                 </label>
             </div>
         </div>
-        <div id="passwordCont" style="width: 300px" class="col gap-5">
+        <div id="passwordCont" style="width: 300px; max-width: 100%" class="col gap-5">
             <input type="password" class="textbox" id="inputPassword" value="${connection.password || ''}" placeholder="Password">
             <small>${securityNote('password')}</small>
         </div>
-        <div id="keyCont" class="col gap-5" style="width: 500px">
+        <div id="keyCont" class="col gap-5" style="width: 500px; max-width: 100%">
             <div class="row">
                 <button id="loadKeyFromFile" class="btn secondary small">
                     <div class="icon">key</div>
@@ -329,7 +334,7 @@ const editConnectionDialog = async (id) => new Promise(resolve => {
             <small>Your private key is typically located under <b>C:\\Users\\you\\.ssh</b> on Windows, or <b>/home/you/.ssh</b> on Unix. It's not the ".pub" file! The server has to be configured to accept your public key for your private one to work.</small>
             <small>${securityNote('private key')}</small>
         </div>
-        <div style="width: 300px">
+        <div style="width: 300px; max-width: 100%">
             <label>Starting path</label>
             <input type="text" class="textbox" id="inputPath" value="${connection.path}" placeholder="/home/kayla">
         </div>
@@ -492,15 +497,29 @@ const changePath = async(path, pushState = true) => {
 }
 
 const loadDirectory = async path => {
+    // Hide the file view
+    elFiles.style.transition = 'none';
+    elFiles.style.pointerEvents = 'none';
+    requestAnimationFrame(() => {
+        elFiles.style.opacity = 0;
+    });
     // Remove all existing file elements
-    elFiles.innerHTML = '';
+    elFiles.innerHTML = `
+        <div class="heading">Folders</div>
+        <div id="filesFolders" class="section folders"></div>
+        <div class="heading">Files</div>
+        <div id="filesFiles" class="section files"></div>
+    `;
+    const elFilesFolders = $('.folders', elFiles);
+    const elFilesFiles = $('.files', elFiles);
     lastSelectedIndex = -1;
     // Disable directory controls
     updateDirControls();
     btnUpload.disabled = true;
     btnDirCreate.disabled = true;
     btnDownload.disabled = true;
-    btnSort.disabled = true;
+    btnShare.disabled = true;
+    btnDirSort.disabled = true;
     // Get the directory listing
     setStatus(`Loading directory...`);
     const data = await api.get('directories/list', { path: path });
@@ -510,52 +529,40 @@ const loadDirectory = async path => {
         setStatus(`Error: ${data.error}`, true);
         data.list = [];
     }
-    // Make separate arrays for folders and files
-    const onlyDirs = [];
-    const onlyFiles = [];
-    for (const file of data.list) {
-        if (file.type === 'd') {
-            onlyDirs.push(file);
-        } else {
-            onlyFiles.push(file);
-        }
-    }
-    // Define sorting functions
-    const sortFuncs = {
-        name: (a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }),
-        size: (a, b) => a.size - b.size,
-        date: (a, b) => a.modifyTime - b.modifyTime
-    };
-    // Sort the lists of folders and files by the selected sort type
-    onlyDirs.sort(sortFuncs[sortType]);
-    onlyFiles.sort(sortFuncs[sortType]);
-    // Reverse them if sorting descending
-    if (sortDesc) {
-        onlyDirs.reverse();
-        onlyFiles.reverse();
-    }
-    // Combine the file list and add the ".." directory
+    // Add the ".." directory
     const list = [{
         name: '..',
         type: 'd',
         longname: '-'
-    }, ...onlyDirs, ...onlyFiles];
+    }, ...data.list];
     // Loop through the list and create file elements
-    let i = 0;
     for (const file of list) {
         const elFile = getFileEntryElement(file, path);
-        elFile.dataset.index = i;
-        i++;
         // Add the file element to the file list
-        elFiles.appendChild(elFile);
+        if (file.type == 'd')
+            elFilesFolders.appendChild(elFile);
+        else
+            elFilesFiles.appendChild(elFile);
     }
+    // Sort the file list
+    sortFiles();
+    // Show the file view
+    elFiles.style.transition = '0.15s var(--bezier)';
+    requestAnimationFrame(() => {
+        elFiles.style.opacity = 1;
+        setTimeout(() => {
+            elFiles.style.pointerEvents = '';
+            elFiles.style.transition = 'none';
+        }, 200);
+    });
     // Re-enable directory controls accordingly
+    fileAccessLock = false;
     if (!data.error) {
         btnUpload.disabled = false;
         btnDirCreate.disabled = false;
         btnDownload.disabled = false;
-        btnSort.disabled = false;
-        fileDoubleClickLock = false;
+        btnShare.disabled = false;
+        btnDirSort.disabled = false;
         updateDirControls();
         setStatus(`Loaded directory with ${list.length} items in ${Date.now()-loadStartTime}ms`);
     }
@@ -563,7 +570,7 @@ const loadDirectory = async path => {
 
 const getFileEntryElement = (file, path) => {
     const elFile = document.createElement('button');
-    elFile.classList = 'btn fileEntry row gap-10';
+    elFile.classList = 'btn fileEntry row';
     // If the file is "hidden", give it the class
     if (file.name != '..' && file.name.substring(0, 1) === '.') {
         elFile.classList.add('hidden');
@@ -573,6 +580,7 @@ const getFileEntryElement = (file, path) => {
     elFile.dataset.type = file.type;
     elFile.dataset.name = file.name;
     elFile.dataset.size = file.size;
+    elFile.dataset.date = file.modifyTime;
     // Get icon
     let icon = 'insert_drive_file';
     if (file.type == 'd') icon = 'folder';
@@ -581,6 +589,7 @@ const getFileEntryElement = (file, path) => {
     if (file.type == 'p') icon = 'filter_alt';
     if (file.type == 'c') icon = 'output';
     if (file.type == 's') icon = 'wifi';
+    if (file.name == '..') icon = 'drive_folder_upload';
     // Get formatted file info
     const sizeFormatted = (file.size && file.type !== 'd') ? formatSize(file.size) : '-';
     const dateRelative = file.modifyTime ? getRelativeDate(file.modifyTime) : '-';
@@ -602,39 +611,43 @@ const getFileEntryElement = (file, path) => {
         return str;
     })();
     // Build the HTML
+    let lower = [];
+    if (dateRelative !== '-') lower.push(dateRelative);
+    if (sizeFormatted !== '-') lower.push(sizeFormatted);
     elFile.innerHTML = /*html*/`
         <div class="icon flex-no-shrink">${icon}</div>
-        <div class="nameCont col gap-2 flex-grow">
+        <div class="nameCont col flex-grow">
             <div class="name"><span title="${file.name}">${file.name}</span></div>
-            <div class="lower">
-                <span class="date">${dateRelative}</span>
-                •
-                <span class="size">${sizeFormatted}</span>
-            </div>
+            ${lower.length > 0 ? /*html*/`<div class="lower">${lower.join(' • ')}</div>`:''}
         </div>
         <div class="date flex-no-shrink" ${dateAbsolute ? `title="${dateAbsolute}"`:''}>${dateRelative}</div>
         <div class="size flex-no-shrink">${sizeFormatted}</div>
         <div class="perms flex-no-shrink" title="${permsNum}">${perms}</div>
     `;
-    // Handle clicks on the file element
+    // Handle access
+    const accessFile = () => {
+        if (fileAccessLock) return;
+        // Handle file loading accordingly
+        if (file.type !== 'd') {
+            loadFile(elFile.dataset.path);
+        } else {
+            // Lock file selection to prevent double-clicking during load
+            fileAccessLock = true;
+            // Clear forward history and change paths
+            forwardPaths = [];
+            changePath(elFile.dataset.path);
+        }
+    };
+    // Handle clicks
     let lastClick = 0;
     elFile.addEventListener('click', e => {
         e.stopPropagation();
+        if (getIsMobileDevice()) return;
         // If the control key isn't held
         if (!e.ctrlKey) {
             // If this is a double-click
             if ((Date.now()-lastClick) < 300) {
-                if (fileDoubleClickLock) return;
-                // Handle file loading accordingly
-                if (file.type !== 'd') {
-                    loadFile(elFile.dataset.path);
-                } else {
-                    // Lock file selection to prevent double-clicking during load
-                    fileDoubleClickLock = true;
-                    // Clear forward history and change paths
-                    forwardPaths = [];
-                    changePath(elFile.dataset.path);
-                }
+                accessFile();
             }
         }
         // Update our last click time
@@ -658,16 +671,11 @@ const getFileEntryElement = (file, path) => {
             selectFile(elFile.dataset.path, !state, state);
         }
     });
-    // Handle keypresses on the file element
+    // Handle keypresses
     elFile.addEventListener('keydown', e => {
         // If the enter key is pressed
         if (e.code === 'Enter') {
-            // Handle file loading accordingly
-            if (file.type !== 'd') {
-                loadFile(elFile.dataset.path);
-            } else {
-                changePath(elFile.dataset.path);
-            }
+            accessFile();
         }
         // Focus the next file
         if (e.code == 'ArrowDown') {
@@ -696,29 +704,70 @@ const getFileEntryElement = (file, path) => {
                 selectFile(elFile.dataset.path, !e.ctrlKey, true);
         }
     });
-    // Handle right-clicks on the file element
+    // Handle right-clicks
     elFile.addEventListener('contextmenu', e => {
-        e.preventDefault();
         e.stopPropagation();
+        e.preventDefault();
+        if (getIsMobileDevice()) return;
         // If the file is already selected, don't change selection
         if (!elFile.classList.contains('selected')) {
             selectFile(elFile.dataset.path, true, true);
         }
         fileContextMenu();
     });
+    // Handle mobile touch start
+    let timeTouchStart = 0;
+    let initialSelectTimeout = null;
+    let selectedWithTimeout = false;
+    elFile.addEventListener('touchstart', e => {
+        if (!getIsMobileDevice()) return;
+        timeTouchStart = Date.now();
+        selectedWithTimeout = false;
+        if (!checkIsSelecting()) {
+            initialSelectTimeout = setTimeout(() => {
+                if ((Date.now()-timeTouchStart) > 1000) return;
+                selectFile(elFile.dataset.path, true, false);
+                selectedWithTimeout = true;
+                if (navigator.vibrate) navigator.vibrate(2);
+            }, 500);
+        }
+    });
+    // Handle mobile touch end
+    elFile.addEventListener('touchend', e => {
+        if (!getIsMobileDevice()) return;
+        clearTimeout(initialSelectTimeout);
+        if ((Date.now()-timeTouchStart) > 1000) return;
+        if (selectedWithTimeout) return;
+        if (checkIsSelecting()) {
+            selectFile(elFile.dataset.path, false, true);
+        } else {
+            accessFile();
+        }
+    });
+    // Handle mobile touch move
+    elFile.addEventListener('touchmove', e => {
+        if (!getIsMobileDevice()) return;
+        clearTimeout(initialSelectTimeout);
+        timeTouchStart = 0;
+    });
     return elFile;
 }
 
-const fileContextMenu = () => {
-    const selected = getSelectedFiles();
+const fileContextMenu = (elDisplay = null) => {
+    const allVisibleFiles = [...$$('#files .fileEntry:not(.hidden)', elFiles)];
+    if (showHidden)
+        allVisibleFiles.push(...[...$$('#files .fileEntry.hidden', elFiles)]);
+    const selectedFiles = [...getSelectedFiles()];
     // We have to delay button clicks to allow time for
     // the context menu to lose focus trap
     const clickButton = btn => setTimeout(() => btn.click(), 100);
     // Selection status shortcuts
-    const isNoneSelected = selected.length == 0;
-    const isSomeSelected = selected.length > 0;
-    const isSingleSelected = selected.length == 1;
-    const isMultiSelected = selected.length > 1;
+    const isNoneSelected = selectedFiles.length == 0;
+    const isSomeSelected = selectedFiles.length > 0;
+    const isSingleSelected = selectedFiles.length == 1;
+    const isMultiSelected = selectedFiles.length > 1;
+    const isAllSelected = selectedFiles.length == allVisibleFiles.length-1;
+    console.log(selectedFiles.length, allVisibleFiles.length)
     // Build the menu
     const menu = new ContextMenuBuilder();
     if (isNoneSelected) menu.addItem(item => {
@@ -762,10 +811,16 @@ const fileContextMenu = () => {
             .setClickHandler(() => clickButton(btnRename))
         return item;
     });
-    if (!btnSelectionMove.disabled) menu.addItem(item => {
-        item.setIcon($('.icon', btnSelectionMove).innerText)
-            .setLabel(`Move...`)
-            .setClickHandler(() => clickButton(btnSelectionMove))
+    if (!btnSelectionMoveTo.disabled) menu.addItem(item => {
+        item.setIcon($('.icon', btnSelectionMoveTo).innerText)
+            .setLabel(`Move to...`)
+            .setClickHandler(() => clickButton(btnSelectionMoveTo))
+        return item;
+    });
+    if (!btnSelectionCopyTo.disabled) menu.addItem(item => {
+        item.setIcon($('.icon', btnSelectionCopyTo).innerText)
+            .setLabel(`Copy to...`)
+            .setClickHandler(() => clickButton(btnSelectionCopyTo))
         return item;
     });
     if (!btnSelectionDelete.disabled) menu.addItem(item => {
@@ -783,25 +838,125 @@ const fileContextMenu = () => {
         btnDownload.disabled ? item.disable() : item.enable();
         return item;
     });
+    menu.addItem(item => {
+        item.setIcon('share')
+            .setLabel(`Copy download link...`)
+            .setClickHandler(() => clickButton(btnShare))
+        btnDownload.disabled ? item.disable() : item.enable();
+        return item;
+    });
     if (!isMultiSelected) menu.addSeparator();
     if (!isMultiSelected) menu.addItem(item => {
         item.setIcon('conversion_path')
             .setLabel('Copy path')
             .setClickHandler(() => {
-                const path = isNoneSelected ? activeConnection.path : selected[0].dataset.path;
+                const path = isNoneSelected ? activeConnection.path : selectedFiles[0].dataset.path;
                 navigator.clipboard.writeText(path);
                 setStatus(`Copied path to clipboard`);
             })
         return item;
     });
-    menu.showAtCursor();
+    menu.addSeparator();
+    if (!isAllSelected) menu.addItem(item => item
+        .setIcon('select_all')
+        .setLabel('Select all')
+        .setTooltip('Ctrl + A')
+        .setClickHandler(selectAllFiles))
+    if (isSomeSelected) menu.addItem(item => item
+        .setIcon('select')
+        .setLabel('Deselect all')
+        .setTooltip('Ctrl + Shift + A')
+        .setClickHandler(deselectAllFiles))
+    if (isSomeSelected && !isAllSelected) menu.addItem(item => item
+        .setIcon('move_selection_up')
+        .setLabel('Invert selection')
+        .setTooltip('Ctrl + Alt + A')
+        .setClickHandler(invertFileSelection))
+    if (elDisplay) {
+        const rect = elDisplay.getBoundingClientRect();
+        menu.showAtCoords(rect.left, rect.bottom-5);
+    } else {
+        menu.showAtCursor();
+    }
+}
+
+const sortFiles = () => {
+    // Define sorting functions
+    const sortFuncs = {
+        name: (a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }),
+        size: (a, b) => a.size - b.size,
+        date: (a, b) => a.date - b.date
+    };
+    // Loop through file sections
+    const sections = [...$$('.section', elFiles)];
+    let i = 0;
+    for (const section of sections) {
+        const files = [...$$('#files .fileEntry', section)];
+        // Sort files
+        files.sort((a, b) => {
+            if (a.dataset.name == '..') return -1;
+            if (b.dataset.name == '..') return 1;
+            const aData = {
+                name: a.dataset.name,
+                size: parseInt(a.dataset.size),
+                date: parseInt(a.dataset.date)
+            };
+            const bData = {
+                name: b.dataset.name,
+                size: parseInt(b.dataset.size),
+                date: parseInt(b.dataset.date)
+            };
+            const sortFunc = sortFuncs[sortType];
+            return sortFunc(aData, bData) * (sortDesc ? -1 : 1);
+        });
+        // Append files to the file list
+        for (const file of files) {
+            file.dataset.index = i;
+            section.appendChild(file);
+            i++;
+        }
+    }
+}
+
+const changeFileSortType = type => {
+    sortType = type;
+    window.localStorage.setItem('sortType', sortType);
+    sortFiles();
+}
+
+const changeFileSortDirection = desc => {
+    sortDesc = desc;
+    window.localStorage.setItem('sortDesc', sortDesc);
+    sortFiles();
+}
+
+const changeFileViewMode = type => {
+    if (type == 'list' && window.innerWidth < forceTileViewWidth) {
+        return new PopupBuilder()
+            .setTitle(`Can't switch to list view`)
+            .addBodyHTML(`<p>Your screen is too narrow to switch to list view! Rotate your device or move to a larger screen, then try again.</p>`)
+            .addAction(action => action.setLabel('Okay').setIsPrimary(true))
+            .show();
+    }
+    viewMode = type;
+    window.localStorage.setItem('viewMode', viewMode);
+    elFiles.classList.remove('list', 'tiles');
+    elFiles.classList.add(viewMode);
+    elFileColHeadings.classList.toggle('tiles', type == 'tiles');
+}
+
+const toggleHiddenFileVisibility = () => {
+    showHidden = !showHidden;
+    window.localStorage.setItem('showHidden', showHidden);
+    elFiles.classList.toggle('showHidden', showHidden);
 }
 
 const loadFile = async path => {
     downloadFile(path);
 }
 
-const downloadFile = async path => {
+const getFileDownloadUrl = async path => {
+    setStatus(`Getting single file download URL...`);
     const res = await api.get('files/get/single/url', {
         path: path
     });
@@ -809,16 +964,25 @@ const downloadFile = async path => {
         return setStatus(`Error: ${res.error}`, true);
     }
     if (res.download_url) {
-        window.location.href = res.download_url;
+        return res.download_url;
+    }
+    return false;
+}
+
+const downloadFile = async path => {
+    const url = await getFileDownloadUrl(path);
+    if (url) {
+        window.location.href = url;
         setStatus(`Single file download started`);
     }
 }
 
-const downloadZip = async(paths, rootPath = '/') => {
+const getZipDownloadUrl = async(paths, rootPath = '/') => {
     const pathsJson = JSON.stringify(paths);
-    if (pathsJson.length > 1900) {
+    if ((pathsJson.length+rootPath.length) > 1900) {
         return setStatus(`Error: Too many selected paths for zip download`, true);
     }
+    setStatus(`Getting zip file download URL...`);
     const res = await api.get('files/get/multi/url', {
         paths: pathsJson,
         rootPath: rootPath
@@ -827,7 +991,15 @@ const downloadZip = async(paths, rootPath = '/') => {
         return setStatus(`Error: ${res.error}`, true);
     }
     if (res.download_url) {
-        window.location.href = res.download_url;
+        return res.download_url;
+    }
+    return false;
+}
+
+const downloadZip = async(paths, rootPath = '/') => {
+    const url = await getZipDownloadUrl(paths, rootPath);
+    if (url) {
+        window.location.href = url;
         setStatus(`Zip file download started`);
     }
 }
@@ -838,20 +1010,23 @@ const updateDirControls = () => {
     btnSelectionCopy.disabled = true;
     btnSelectionPaste.disabled = true;
     btnRename.disabled = true;
-    btnSelectionMove.disabled = true;
+    btnSelectionMoveTo.disabled = true;
+    btnSelectionCopyTo.disabled = true;
     btnSelectionDelete.disabled = true;
     // When no files are selected
     if (selectedFiles.length == 0) {
-        // ...
+        btnDirMenu.classList.remove('info');
     // When files are selected
     } else {
+        btnDirMenu.classList.add('info');
         // When a single file is selected
         if (selectedFiles.length == 1) {
             btnRename.disabled = false;
         }
         btnSelectionCut.disabled = false;
         btnSelectionCopy.disabled = false;
-        btnSelectionMove.disabled = false;
+        btnSelectionMoveTo.disabled = false;
+        btnSelectionCopyTo.disabled = false;
         btnSelectionDelete.disabled = false;
     }
     // When there are files in the clipboard
@@ -863,27 +1038,29 @@ const updateDirControls = () => {
 const getSelectedFiles = () => $$('.selected', elFiles);
 
 const selectFile = (path, deselectOthers = true, toggle = false, focus = false) => {
-    const el = $(`#files .fileEntry[data-path="${path}"]`, elFiles);
+    const el = $(`.fileEntry[data-path="${path}"]`, elFiles);
     if (!el) return;
+    if (el.dataset.name == '..') return;
     const isSelected = el.classList.contains('selected');
     if (deselectOthers) deselectAllFiles();
     if (toggle)
         el.classList.toggle('selected', !isSelected);
     else
         el.classList.add('selected');
-    if (focus)
-        el.focus();
+    if (focus) el.focus();
+    deselectHiddenFiles();
     lastSelectedIndex = parseInt(el.dataset.index);
     updateDirControls();
 }
 
 const selectAllFiles = () => {
-    const files = [...$$('#files .fileEntry', elFiles)];
+    const files = [...$$('.fileEntry', elFiles)];
     files.shift();
     for (const el of files) {
         el.classList.add('selected');
     }
-    lastSelectedIndex = files.length-1;
+    deselectHiddenFiles();
+    lastSelectedIndex = parseInt($('.fileEntry.selected:last-child', elFiles).dataset.index || -1);
     updateDirControls();
 }
 
@@ -896,6 +1073,15 @@ const deselectAllFiles = () => {
     updateDirControls();
 }
 
+const deselectHiddenFiles = () => {
+    if (showHidden) return;
+    const hidden = [...$$('.hidden', elFiles)];
+    for (const el of hidden) {
+        el.classList.remove('selected');
+    }
+    updateDirControls();
+}
+
 const invertFileSelection = () => {
     const files = [...$$('#files .fileEntry', elFiles)];
     files.shift();
@@ -903,13 +1089,19 @@ const invertFileSelection = () => {
         el.classList.toggle('selected');
     }
     lastSelectedIndex = parseInt($('#files .fileEntry:last-child', elFiles).dataset.index) || -1;
+    deselectHiddenFiles();
     updateDirControls();
+}
+
+const checkIsSelecting = () => {
+    const selected = getSelectedFiles();
+    return selected.length > 0;
 }
 
 const createDirectoryDialog = async() => {
     const el = document.createElement('div');
     el.innerHTML = /*html*/`
-        <div style="width: 300px">
+        <div style="width: 300px; max-width: 100%">
             <input type="text" class="textbox" id="inputDirName" placeholder="Folder name">
         </div>
     `;
@@ -946,7 +1138,7 @@ const renameFileDialog = async path => {
     const el = document.createElement('div');
     const currentName = path.split('/').pop();
     el.innerHTML = /*html*/`
-        <div style="width: 300px">
+        <div style="width: 300px; max-width: 100%">
             <input type="text" class="textbox" id="inputFileName" placeholder="${currentName}" value="${currentName}">
         </div>
     `;
@@ -995,7 +1187,7 @@ const renameFileDialog = async path => {
 const selectDirDialog = async(startPath = activeConnection.path, title = 'Select folder', actionLabel = 'Select') => new Promise(resolve => {
     const el = document.createElement('div');
     el.innerHTML = /*html*/`
-        <div class="moveFilesPicker col gap-10" style="width: 500px">
+        <div class="moveFilesPicker col gap-10" style="width: 500px; max-width: 100%">
             <div class="row gap-10">
                 <input type="text" class="textbox" id="inputDirPath" placeholder="${startPath}">
                 <button class="btn secondary iconOnly go">
@@ -1098,15 +1290,6 @@ const moveFiles = async(newDirPath, filePaths) => {
     return false;
 }
 
-const moveFilesDialog = async() => {
-    const selected = [...getSelectedFiles()].map(el => el.dataset.path);
-    // Prompt the user to select a directory
-    const newDirPath = await selectDirDialog(undefined, `Move ${selected.length > 1 ? `${selected.length} files`:'file'}`, 'Move here');
-    if (!newDirPath) return;
-    // Move the files
-    moveFiles(newDirPath, selected);
-}
-
 const copyFiles = async(newDirPath, filePaths) => {
     // Loop through selected files
     const newPaths = [];
@@ -1147,6 +1330,18 @@ const copyFiles = async(newDirPath, filePaths) => {
         return newPaths;
     }
     return false;
+}
+
+const moveFilesDialog = async(copy = false) => {
+    const selectedPaths = [...getSelectedFiles()].map(el => el.dataset.path);
+    // Prompt the user to select a directory
+    const newDirPath = await selectDirDialog(undefined, `${copy ? 'Copy':'Move'} ${selectedPaths.length > 1 ? `${selectedPaths.length} files`:'file'}`, `${copy ? 'Copy':'Move'} here`);
+    if (!newDirPath) return;
+    // Move or copy the files
+    if (copy)
+        copyFiles(newDirPath, selectedPaths);
+    else
+        moveFiles(newDirPath, selectedPaths);
 }
 
 const replaceDialog = path => new Promise(resolve => {
@@ -1292,6 +1487,35 @@ const deleteDirectory = async(path, refresh = true) => {
     return data;
 }
 
+const historyContextMenu = (e, btn, paths, menu = new ContextMenuBuilder()) => {
+    if (btn.disabled) return;
+    e.preventDefault();
+    paths = JSON.parse(JSON.stringify(paths)).reverse();
+    for (let i = 0; i < 10; i++) {
+        let path = paths[i];
+        if (!path) break;
+        let split = path.split('/');
+        let base = split.pop();
+        let dir = `/${split.join('/')}/`.replace(/\/\//g, '/');
+        menu.addItem(item => {
+            const html = /*html*/`
+                <span style="color: var(--f3)">${escapeHTML(dir)}<span style="color: var(--f1)">${escapeHTML(base)}</span></span>
+            `;
+            item.elLabel.innerHTML = html;
+            const span = $('span', item.elLabel);
+            span.title = html;
+            item.setClickHandler(() => {
+                changePath(path, false);
+            });
+            return item;
+        });
+    }
+    menu.el.style.maxWidth = '100%';
+    menu.setIconVisibility(false);
+    const rect = btn.getBoundingClientRect();
+    menu.showAtCoords(rect.left, rect.bottom-5);
+}
+
 btnConnections.addEventListener('click', () => {
     const menu = new ContextMenuBuilder();
     for (const id in connections) {
@@ -1330,6 +1554,13 @@ btnNavForward.addEventListener('click', () => {
     }
 });
 
+btnNavBack.addEventListener('contextmenu', (e) => {
+    historyContextMenu(e, btnNavBack, backPaths);
+});
+btnNavForward.addEventListener('contextmenu', (e) => {
+    historyContextMenu(e, btnNavForward, forwardPaths);
+});
+
 inputNavPath.addEventListener('keydown', e => {
     if (e.key === 'Enter') {
         btnGo.click();
@@ -1337,6 +1568,65 @@ inputNavPath.addEventListener('keydown', e => {
 });
 btnGo.addEventListener('click', () => {
     changePath(inputNavPath.value || '/');
+});
+
+btnPathPopup.addEventListener('click', () => {
+    const menu = new ContextMenuBuilder()
+        .addItem(item => item
+            .setIcon('pin_drop')
+            .setLabel('Go to path...')
+            .setClickHandler(() => {
+                const popup = new PopupBuilder()
+                    .setTitle('Go to path')
+                    .addAction(action => action
+                        .setIsPrimary(true)
+                        .setLabel('Go')
+                        .setClickHandler(() => {
+                            const path = $('#inputGoToPath', popup.el).value || activeConnection.path;
+                            if (path == activeConnection.path) return;
+                            changePath(path);
+                            popup.hide();
+                        }))
+                    .addAction(action => action.setLabel('Cancel'))
+                const elBody = $('.body', popup.el);
+                elBody.innerHTML = /*html*/`
+                    <div style="width: 400px; max-width: 100%">
+                        <input type="text" class="textbox" id="inputGoToPath" placeholder="${activeConnection.path}" value="${activeConnection.path}">
+                    </div>
+                `;
+                const input = $('#inputGoToPath', elBody);
+                input.addEventListener('keydown', e => {
+                    if (e.key === 'Enter') {
+                        $('.btn:first-of-type', popup.el).click();
+                    }
+                });
+                popup.show();
+                setTimeout(() => {
+                    input.focus();
+                    input.select();
+                }, 100);
+            }));
+    const pathSplit = activeConnection.path.split('/');
+    pathSplit.pop();
+    if (pathSplit.length > 0) {
+        menu.addSeparator();
+        let path = '';
+        for (const node of pathSplit) {
+            path += `/${node}`;
+            menu.addItem(item => item
+                .setIcon('folder_open')
+                .setLabel(node || '/')
+                .setClickHandler(() => {
+                    changePath(path);
+                }));
+        }
+    }
+    const rect = btnPathPopup.getBoundingClientRect();
+    menu.showAtCoords(rect.right, rect.bottom-5);
+});
+
+btnDirMenu.addEventListener('click', () => {
+    fileContextMenu(btnDirMenu);
 });
 
 btnUpload.addEventListener('click', uploadFilesPrompt);
@@ -1396,7 +1686,8 @@ btnSelectionPaste.addEventListener('click', async() => {
     }
 });
 
-btnSelectionMove.addEventListener('click', moveFilesDialog);
+btnSelectionMoveTo.addEventListener('click', () => moveFilesDialog(false));
+btnSelectionCopyTo.addEventListener('click', () => moveFilesDialog(true));
 
 btnSelectionDelete.addEventListener('click', async() => {
     const selected = [...getSelectedFiles()];
@@ -1450,71 +1741,86 @@ btnDownload.addEventListener('click', () => {
     }
 });
 
-btnSort.addEventListener('click', () => {
+btnShare.addEventListener('click', async() => {
+    new PopupBuilder()
+        .setTitle('Copy download link')
+        .addBodyHTML(`<p>This link will allow anyone to download your selected files and folders for the next 24 hours without the need for any credentials. Make sure you aren't sharing anything sensitive!</p>`)
+        .addAction(action => action
+            .setLabel('Copy')
+            .setIsPrimary(true)
+            .setClickHandler(async() => {
+                let url;
+                let selected = [...getSelectedFiles()];
+                const isNoneSelected = selected.length == 0;
+                const isSingleSelected = selected.length == 1;
+                const isMultiSelected = selected.length > 1;
+                if (isNoneSelected)
+                    url = await getZipDownloadUrl([activeConnection.path], activeConnection.path);
+                else if (isSingleSelected) {
+                    const el = selected[0];
+                    if (el.dataset.type == 'd')
+                        url = await getZipDownloadUrl([el.dataset.path], activeConnection.path);
+                    else
+                        url = await getFileDownloadUrl(el.dataset.path);
+                } else if (isMultiSelected)
+                    url = await getZipDownloadUrl(selected.map(el => el.dataset.path), activeConnection.path);
+                if (url) {
+                    navigator.clipboard.writeText(url);
+                    setStatus(`Copied download link to clipboard`);
+                }
+            }))
+        .addAction(action => action.setLabel('Cancel'))
+        .show();
+});
+
+btnDirView.addEventListener('click', () => {
     const menu = new ContextMenuBuilder();
-    const changeType = type => {
-        sortType = type;
-        window.localStorage.setItem('sortType', sortType);
-        changePath();
-    };
-    const changeDirection = desc => {
-        sortDesc = desc;
-        window.localStorage.setItem('sortDesc', sortDesc);
-        changePath();
-    };
+    menu.addItem(item => item
+        .setIcon(viewMode === 'list' ? 'check' : '')
+        .setLabel('List')
+        .setClickHandler(() => changeFileViewMode('list')));
+    menu.addItem(item => item
+        .setIcon(viewMode === 'tiles' ? 'check' : '')
+        .setLabel('Tiles')
+        .setClickHandler(() => changeFileViewMode('tiles')));
+    menu.addSeparator();
+    menu.addItem(item => item
+        .setIcon(showHidden ? 'check' : '')
+        .setLabel('Show hidden files')
+        .setClickHandler(() => toggleHiddenFileVisibility()));
+    const rect = btnDirView.getBoundingClientRect();
+    menu.showAtCoords(rect.left, rect.bottom-5);
+});
+elFiles.classList.toggle('showHidden', showHidden);
+elFiles.classList.add(viewMode);
+elFileColHeadings.classList.toggle('tiles', elFiles.classList.contains('tiles'));
+
+btnDirSort.addEventListener('click', () => {
+    const menu = new ContextMenuBuilder();
     menu.addItem(item => item
         .setIcon(sortType === 'name' ? 'check' : '')
         .setLabel('Name')
-        .setClickHandler(() => changeType('name')));
+        .setClickHandler(() => changeFileSortType('name')));
     menu.addItem(item => item
         .setIcon(sortType === 'date' ? 'check' : '')
         .setLabel('Modified')
-        .setClickHandler(() => changeType('date')));
+        .setClickHandler(() => changeFileSortType('date')));
     menu.addItem(item => item
         .setIcon(sortType === 'size' ? 'check' : '')
         .setLabel('Size')
-        .setClickHandler(() => changeType('size')));
+        .setClickHandler(() => changeFileSortType('size')));
     menu.addSeparator();
     menu.addItem(item => item
         .setIcon(!sortDesc ? 'check' : '')
         .setLabel('Ascending')
-        .setClickHandler(() => changeDirection(false)));
+        .setClickHandler(() => changeFileSortDirection(false)));
     menu.addItem(item => item
         .setIcon(sortDesc ? 'check' : '')
         .setLabel('Descending')
-        .setClickHandler(() => changeDirection(true)));
-    const rect = btnSort.getBoundingClientRect();
+        .setClickHandler(() => changeFileSortDirection(true)));
+    const rect = btnDirSort.getBoundingClientRect();
     menu.showAtCoords(rect.left, rect.bottom-5);
 });
-
-btnManageSelection.addEventListener('click', () => {
-    const menu = new ContextMenuBuilder()
-        .addItem(item => item
-            .setIcon('select_all')
-            .setLabel('Select all')
-            .setTooltip('Ctrl + A')
-            .setClickHandler(selectAllFiles))
-        .addItem(item => item
-            .setIcon('select')
-            .setLabel('Select none')
-            .setTooltip('Ctrl + Shift + A')
-            .setClickHandler(deselectAllFiles))
-        .addItem(item => item
-            .setIcon('move_selection_up')
-            .setLabel('Invert selection')
-            .setTooltip('Ctrl + Alt + A')
-            .setClickHandler(invertFileSelection));
-    const rect = btnManageSelection.getBoundingClientRect();
-    menu.showAtCoords(rect.left, rect.bottom-5);
-});
-
-btnToggleHidden.addEventListener('click', () => {
-    showHidden = !showHidden;
-    window.localStorage.setItem('showHidden', showHidden);
-    elFiles.classList.toggle('showHidden', showHidden);
-    setStatus(`${showHidden ? `Showing`:`Hiding`} hidden files`);
-});
-elFiles.classList.toggle('showHidden', showHidden);
 
 elFiles.addEventListener('dragover', e => {
     e.preventDefault();
@@ -1546,9 +1852,10 @@ elFiles.addEventListener('contextmenu', e => {
 });
 
 window.addEventListener('click', e => {
-    const matchIds = [ 'dirControls', 'files', 'fileColHeadings', 'statusBar' ];
+    const matchIds = [ 'dirControls', 'files', 'filesFiles', 'filesFolders', 'fileColHeadings', 'statusBar' ];
     if (!matchIds.includes(e.target.id)) return;
     if (!e.ctrlKey) {
+        if (getIsMobileDevice()) return;
         deselectAllFiles();
     }
 });
@@ -1587,13 +1894,13 @@ window.addEventListener('keydown', e => {
             if (e.code === 'KeyD')
                 return () => btnDownload.click();
             if (e.code === 'KeyH')
-                return () => btnToggleHidden.click();
+                return () => toggleHiddenFileVisibility();
             if (e.code === 'KeyN')
                 return () => btnDirCreate.click();
             if (e.code === 'KeyU')
                 return () => btnUpload.click();
             if (e.code === 'KeyM')
-                return () => btnSelectionMove.click();
+                return () => btnSelectionMoveTo.click();
         }
         // Alt
         if (e.altKey) {
@@ -1615,20 +1922,9 @@ window.addEventListener('keydown', e => {
     }
 });
 
-const showMobileWarning = () => new PopupBuilder()
-    .setTitle('Laugh at this user!!')
-    .addBodyHTML(`
-        <p>This site isn't optimized for small screens! To get a real feel for SFTP Browser, resize the window, load it up on a larger display, or rotate your device!</p>
-        <p>Mobile optimization is coming soon!</p>
-    `)
-    .addAction(action => action.setIsPrimary(true).setLabel('Okay'))
-    .show();
-
-let shownMobileWarning = false;
 window.addEventListener('resize', () => {
-    if (window.innerWidth < 800 && !shownMobileWarning) {
-        showMobileWarning();
-        shownMobileWarning = true;
+    if (window.innerWidth < forceTileViewWidth) {
+        changeFileViewMode('tiles');
     }
 });
 

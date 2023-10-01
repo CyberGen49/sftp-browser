@@ -82,6 +82,18 @@ body {
 #dirControls {
     padding: 8px 16px;
     border-bottom: 1px solid var(--b3);
+    overflow-x: auto;
+    overflow-y: hidden;
+}
+#dirControls::-webkit-scrollbar {
+    height: 3px;
+    background: transparent;
+}
+#dirControls::-webkit-scrollbar-thumb {
+    background: var(--b4);
+}
+#dirControls::-webkit-scrollbar-thumb:hover {
+    background: var(--b5);
 }
 #dirControls .sep {
     width: 1px;
@@ -90,6 +102,18 @@ body {
     background-color: var(--b3);
 }
 
+#fileColHeadings {
+    padding: 10px 24px 6px 24px;
+    font-weight: bold;
+    color: var(--b5);
+    font-size: 14px;
+    user-select: none;
+    overflow-y: scroll;
+    scrollbar-gutter: stable;
+}
+#fileColHeadings.tiles {
+    display: none;
+}
 #files {
     overflow-x: hidden;
     overflow-y: auto;
@@ -97,6 +121,28 @@ body {
     padding: 4px;
     padding-top: 2px;
     scrollbar-gutter: stable;
+}
+#files:not(.tiles) > .heading {
+    display: none;
+}
+#files.tiles > .heading {
+    display: block;
+    padding: 12px 20px 4px 20px;
+    font-weight: bold;
+    color: var(--b5);
+    font-size: 14px;
+    user-select: none;
+    flex-shrink: 0;
+}
+#files > .section {
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    gap: 2px;
+}
+#files.tiles > .section {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
 }
 .fileEntry {
     justify-content: flex-start;
@@ -107,13 +153,25 @@ body {
     --bgActive: var(--b3);
     font-weight: normal;
     text-align: left;
+    gap: 10px;
 }
-#files:not(.showHidden) > .fileEntry.hidden {
+#files.tiles .fileEntry {
+    height: auto;
+    padding: 11px 20px 9px 20px;
+    gap: 12px;
+}
+#files:not(.showHidden) .fileEntry.hidden {
     display: none;
 }
 .fileEntry > .icon {
     color: var(--f3);
     font-family: 'Material Symbols Filled Rounded';
+}
+#files.tiles .fileEntry > .icon {
+    font-size: 32px;
+}
+.fileEntry > .nameCont {
+    gap: 4px;
 }
 .fileEntry > .nameCont .name {
     color: var(--f1);
@@ -123,19 +181,16 @@ body {
     font-size: 14px;
     color: var(--f3);
 }
+#files.tiles .fileEntry > .nameCont .lower {
+    display: block;
+}
 .fileEntry * {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
-#fileColHeadings {
-    padding: 10px 24px 6px 24px;
-    font-weight: bold;
-    color: var(--b5);
-    font-size: 14px;
-    user-select: none;
-    overflow-y: scroll;
-    scrollbar-gutter: stable;
+#files.tiles .fileEntry > :not(.icon):not(.nameCont) {
+    display: none;
 }
 .fileEntry > .date,
 #fileColHeadings > .date {
@@ -155,7 +210,8 @@ body {
     --bgHover: var(--blue1);
     --bgActive: var(--blue2);
 }
-.fileEntry.selected > .icon {
+.fileEntry.selected > .icon,
+.fileEntry.selected > .nameCont .lower {
     color: var(--f1);
 }
 .fileEntry.hidden:not(.selected) > * {
@@ -163,20 +219,6 @@ body {
 }
 .fileEntry.cut:not(.selected) {
     opacity: 0.5;
-}
-.fileEntry.selected {
-    /*  */
-}
-.fileEntry.copied {
-    /*  */
-}
-.fileEntry.selected.copied {
-    /*  */
-}
-.notice {
-    padding: 20px;
-    color: var(--f3);
-    text-align: center;
 }
 
 #progressBar {
@@ -217,4 +259,27 @@ body {
     border: 1px solid var(--b3);
     height: 300px;
     overflow-y: auto;
+}
+
+/* 540px */
+@media (max-width: 640px) {
+    .atLeast640px {
+        display: none;
+    }
+}
+@media (min-width: 641px) {
+    .atMost640px {
+        display: none;
+    }
+}
+/* 800px */
+@media (max-width: 800px) {
+    .atLeast800px {
+        display: none;
+    }
+}
+@media (min-width: 801px) {
+    .atMost800px {
+        display: none;
+    }
 }
