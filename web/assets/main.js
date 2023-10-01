@@ -7,6 +7,7 @@ const btnGo = $('#pathGo');
 const btnPathPopup = $('#pathPopup');
 const elBelowNavBar = $('#belowNavBar');
 const btnDirMenu = $('#dirMenu');
+const btnDeselectAll = $('#deselectAll');
 const btnUpload = $('#upload');
 const btnDirCreate = $('#dirCreate');
 const btnSelectionCut = $('#fileCut');
@@ -1008,6 +1009,7 @@ const updateDirControls = () => {
     btnSelectionMoveTo.disabled = true;
     btnSelectionCopyTo.disabled = true;
     btnSelectionDelete.disabled = true;
+    btnDeselectAll.style.display = 'none';
     // When no files are selected
     if (selectedFiles.length == 0) {
         btnDirMenu.classList.remove('info');
@@ -1023,6 +1025,7 @@ const updateDirControls = () => {
         btnSelectionMoveTo.disabled = false;
         btnSelectionCopyTo.disabled = false;
         btnSelectionDelete.disabled = false;
+        btnDeselectAll.style.display = '';
     }
     // When there are files in the clipboard
     if (selectionClipboard.length > 0) {
@@ -1623,6 +1626,8 @@ btnPathPopup.addEventListener('click', () => {
 btnDirMenu.addEventListener('click', () => {
     fileContextMenu(btnDirMenu);
 });
+
+btnDeselectAll.addEventListener('click', deselectAllFiles);
 
 btnUpload.addEventListener('click', uploadFilesPrompt);
 
