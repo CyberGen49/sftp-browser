@@ -20,6 +20,7 @@ const btnDownload = $('#fileDownload');
 const btnShare = $('#fileShare');
 const btnDirSort = $('#dirSort');
 const btnDirView = $('#dirView');
+const btnDirSelection = $('#dirSelection');
 const elFileColHeadings = $('#fileColHeadings');
 const elFiles = $('#files');
 const elProgressBar = $('#progressBar');
@@ -744,12 +745,6 @@ const getFileEntryElement = (file, path) => {
             accessFile();
         }
     });
-    // Handle mobile touch move
-    elFile.addEventListener('touchmove', e => {
-        if (!getIsMobileDevice()) return;
-        clearTimeout(initialSelectTimeout);
-        timeTouchStart = 0;
-    });
     return elFile;
 }
 
@@ -1138,7 +1133,7 @@ const renameFileDialog = async path => {
     const el = document.createElement('div');
     const currentName = path.split('/').pop();
     el.innerHTML = /*html*/`
-        <div style="width: 300px; max-width: 100%">
+        <div style="width: 400px; max-width: 100%">
             <input type="text" class="textbox" id="inputFileName" placeholder="${currentName}" value="${currentName}">
         </div>
     `;
@@ -1822,6 +1817,27 @@ btnDirSort.addEventListener('click', () => {
     menu.showAtCoords(rect.left, rect.bottom-5);
 });
 
+btnDirSelection.addEventListener('click', () => {
+    const menu = new ContextMenuBuilder()
+        .addItem(item => item
+            .setIcon('select_all')
+            .setLabel('Select all')
+            .setTooltip('Ctrl + A')
+            .setClickHandler(selectAllFiles))
+        .addItem(item => item
+            .setIcon('select')
+            .setLabel('Deselect all')
+            .setTooltip('Ctrl + Shift + A')
+            .setClickHandler(deselectAllFiles))
+        .addItem(item => item
+            .setIcon('move_selection_up')
+            .setLabel('Invert selection')
+            .setTooltip('Ctrl + Alt + A')
+            .setClickHandler(invertFileSelection));
+    const rect = btnDirSelection.getBoundingClientRect();
+    menu.showAtCoords(rect.left, rect.bottom-5);
+});
+
 elFiles.addEventListener('dragover', e => {
     e.preventDefault();
     e.stopPropagation();
@@ -1901,6 +1917,8 @@ window.addEventListener('keydown', e => {
                 return () => btnUpload.click();
             if (e.code === 'KeyM')
                 return () => btnSelectionMoveTo.click();
+            if (e.code === 'KeyC')
+                return () => btnSelectionCopyTo.click();
         }
         // Alt
         if (e.altKey) {
