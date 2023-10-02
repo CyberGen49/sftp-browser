@@ -28,11 +28,12 @@ const elProgressBar = $('#progressBar');
 const elStatusBar = $('#statusBar');
 const log = [];
 const forceTileViewWidth = 720;
+let apiHost = window.location.host;
+let connections = JSON.parse(window.localStorage.getItem('connections')) || {};
 let activeConnection = null;
 let activeConnectionId = null;
 let backPaths = [];
 let forwardPaths = [];
-let connections = JSON.parse(window.localStorage.getItem('connections')) || {};
 let selectionClipboard = [];
 let isClipboardCut = false;
 let sortType = window.localStorage.getItem('sortType') || 'name';
@@ -79,7 +80,7 @@ const getHeaders = () => {
 
 const api = {
     request: async (method, url, params, body = null, onProgress = () => {}) => {
-        url = `/api/sftp/${url}`;
+        url = `https://${apiHost}/api/sftp/${url}`;
         try {
             const opts = {
                 params, headers: getHeaders(),
@@ -1386,6 +1387,8 @@ const uploadFiles = async files => {
         lastStatusSet = Date.now();
     };
     // Loop through selected files
+    let startTime = Date.now();
+    let totalBytesUploaded = 0;
     const paths = [];
     for (const file of files) {
         if (isCancelled) break;
@@ -1408,33 +1411,82 @@ const uploadFiles = async files => {
             const resDelete = await deleteFile(path, false);
             if (resDelete.error) return;
         }
-        // Upload the file in chunks
-        const chunkSize = 1024*1024*8;
-        const chunks = Math.ceil(file.size / chunkSize);
-        for (let i = 0; i < chunks; i++) {
-            if (isCancelled) break;
-            // Upload the chunk
-            const start = i * chunkSize;
-            const end = Math.min(file.size, (i+1) * chunkSize);
-            const chunk = file.slice(start, end);
-            const res = await api.request('put', 'files/append', {
-                path: path
-            }, chunk, e => {
-                // Update status with progress
-                const bytesTotal = file.size;
-                const bytesUploaded = Math.min((i*chunkSize)+e.loaded, bytesTotal);
-                const percentUploaded = Math.round((bytesUploaded/bytesTotal)*100);
-                setUploadStatus(`Uploading file: ${file.name} | ${formatSize(bytesUploaded)} of ${formatSize(bytesTotal)}`, percentUploaded);
+        // Make a promise to upload the file
+        await new Promise(async(resolve, reject) => {
+            let isUploadComplete = false;
+            // Get socket key
+            const resSocketKey = await api.get('key');
+            const key = resSocketKey.key;
+            // Connect to the file append websocket
+            const url = `wss://${apiHost}/api/sftp/files/append?path=${encodeURIComponent(path)}&key=${key}`;
+            const ws = new WebSocket(url);
+            // Resolve with error if the websocket closes or errors
+            // before the upload is complete
+            ws.addEventListener('close', () => {
+                if (!isUploadComplete) {
+                    isUploading = false;
+                    setStatus(`Error: Websocket unexpectedly closed`, true)
+                    resolve('unexpectedClose');
+                }
             });
-            // If there's an error, force stop the whole upload process
-            if (res.error) {
-                setStatus(`Error: ${res.error}`, true);
-                isUploading = false;
-                return;
+            ws.addEventListener('error', (e) => {
+                if (!isUploadComplete) {
+                    isUploading = false;
+                    setStatus(`Error: Websocket error`, true)
+                    resolve('wsError');
+                }
+            });
+            // Handle messages
+            const messageHandlers = [];
+            ws.addEventListener('message', e => {
+                const data = JSON.parse(e.data);
+                console.log(`Message from upload websocket:`, data);
+                if (!data.success)  {
+                    isUploading = false;
+                    setStatus(`Error: ${data.error}`, true)
+                    resolve('error');
+                }
+                const handler = messageHandlers.shift();
+                if (handler) handler(data.success || false);
+            });
+            // Wait for the websocket to open
+            await new Promise(resolve2 => {
+                messageHandlers.push(resolve2);
+            });
+            console.log(`Opened websocket: ${url}`);
+            // Upload the file in chunks
+            const fileSize = file.size;
+            const bytesPerChunk = 1024*1024*1;
+            const chunkCount = Math.ceil(file.size / bytesPerChunk);
+            for (let i = 0; i < chunkCount; i++) {
+                if (isCancelled) break;
+                const startByte = i * bytesPerChunk;
+                const endByte = Math.min(file.size, (i+1) * bytesPerChunk);
+                const thisChunkSize = endByte - startByte;
+                const chunk = file.slice(startByte, endByte);
+                // Upload the chunk
+                const res = await new Promise(resolve2 => {
+                    // Resolve when the chunk is uploaded
+                    // and server sends a success message
+                    messageHandlers.push(resolve2);
+                    ws.send(chunk);
+                });
+                if (!res) break;
+                // Update status with progress
+                totalBytesUploaded += thisChunkSize;
+                const bytesUploaded = Math.min((i+1)*bytesPerChunk, fileSize);
+                const bytesPerSecond = totalBytesUploaded / ((Date.now()-startTime)/1000);
+                const percentUploaded = Math.round((bytesUploaded/fileSize)*100);
+                setUploadStatus(`Uploading file: ${file.name} | ${formatSize(bytesUploaded)} of ${formatSize(fileSize)} (${formatSize(bytesPerSecond)}/s)`, percentUploaded);
             }
-        }
+            isUploadComplete = true;
+            ws.close();
+            resolve('done');
+        });
+        if (!isUploading) return;
         // If the upload was cancelled, delete the file
         if (isCancelled) {
+            console.log('t')
             await deleteFile(path, false);
             setStatus(`Upload cancelled`);
             break;

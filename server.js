@@ -2,6 +2,8 @@
 const fs = require('fs');
 const path = require('path');
 const express = require('express');
+const expressWs = require('express-ws');
+const asyncHandler = require('express-async-handler');
 const logger = require('cyber-express-logger');
 const sftp = require('ssh2-sftp-client');
 const crypto = require('crypto');
@@ -56,16 +58,21 @@ const getSession = async(res, opts) => {
     } catch (error) {
         delete sessions[hash];
         console.log(`Connection to ${address} failed`);
-        return res.sendError(error);
+        return res ? res.sendError(error) : null;
     }
     return session;
 };
 
 const srv = express();
+expressWs(srv, undefined, {
+    wsOptions: {
+        maxPayload: 1024*1024*4
+    }
+});
 srv.use(logger());
 srv.use(express.static('web'));
 
-srv.use('/api/sftp', async(req, res, next) => {
+const initApi = asyncHandler(async(req, res, next) => {
     res.sendData = (status = 200) => res.status(status).json(res.data);
     res.sendError = (error, status = 400) => {
         res.data.success = false;
@@ -92,7 +99,7 @@ srv.use('/api/sftp', async(req, res, next) => {
     if (!req.session) return;
     next();
 });
-srv.get('/api/sftp/directories/list', async(req, res) => {
+srv.get('/api/sftp/directories/list', initApi, async(req, res) => {
     /** @type {sftp} */
     const session = req.session;
     res.data.path = normalizeRemotePath(req.query.path);
@@ -108,7 +115,7 @@ srv.get('/api/sftp/directories/list', async(req, res) => {
         res.sendError(error);
     }
 });
-srv.post('/api/sftp/directories/create', async(req, res) => {
+srv.post('/api/sftp/directories/create', initApi, async(req, res) => {
     /** @type {sftp} */
     const session = req.session;
     res.data.path = normalizeRemotePath(req.query.path);
@@ -120,7 +127,7 @@ srv.post('/api/sftp/directories/create', async(req, res) => {
         res.sendError(error);
     }
 });
-srv.delete('/api/sftp/directories/delete', async(req, res) => {
+srv.delete('/api/sftp/directories/delete', initApi, async(req, res) => {
     /** @type {sftp} */
     const session = req.session;
     res.data.path = normalizeRemotePath(req.query.path);
@@ -132,7 +139,7 @@ srv.delete('/api/sftp/directories/delete', async(req, res) => {
         res.sendError(error);
     }
 });
-srv.get('/api/sftp/files/exists', async(req, res) => {
+srv.get('/api/sftp/files/exists', initApi, async(req, res) => {
     /** @type {sftp} */
     const session = req.session;
     res.data.path = normalizeRemotePath(req.query.path);
@@ -146,7 +153,7 @@ srv.get('/api/sftp/files/exists', async(req, res) => {
         res.sendError(error);
     }
 });
-srv.post('/api/sftp/files/create', rawBodyParser, async(req, res) => {
+srv.post('/api/sftp/files/create', initApi, rawBodyParser, async(req, res) => {
     /** @type {sftp} */
     const session = req.session;
     res.data.path = normalizeRemotePath(req.query.path);
@@ -158,7 +165,7 @@ srv.post('/api/sftp/files/create', rawBodyParser, async(req, res) => {
         res.sendError(error);
     }
 });
-srv.put('/api/sftp/files/append', rawBodyParser, async(req, res) => {
+srv.put('/api/sftp/files/append', initApi, rawBodyParser, async(req, res) => {
     /** @type {sftp} */
     const session = req.session;
     res.data.path = normalizeRemotePath(req.query.path);
@@ -170,7 +177,73 @@ srv.put('/api/sftp/files/append', rawBodyParser, async(req, res) => {
         res.sendError(error);
     }
 });
-srv.delete('/api/sftp/files/delete', async(req, res) => {
+const keyedRequests = {};
+srv.get('/api/sftp/key', initApi, async(req, res) => {
+    res.data.key = utils.randomHex(32);
+    keyedRequests[res.data.key] = req;
+    res.sendData();
+});
+srv.ws('/api/sftp/files/append', async(ws, wsReq) => {
+    ws.on('close', () => {
+        console.log(`File append websocket closed`);
+    });
+    if (!wsReq.query.key) return ws.close();
+    const req = keyedRequests[wsReq.query.key];
+    if (!req) return ws.close();
+    // Add uniqueness to the connection opts
+    // This forces a new connection to be created
+    req.connectionOpts.ts = Date.now();
+    // Create the session and throw an error if it fails
+    /** @type {sftp} */
+    const session = await getSession(null, req.connectionOpts);
+    if (!session) {
+        ws.send(JSON.stringify({
+            success: false,
+            error: 'Failed to create session!'
+        }));
+        return ws.close();
+    }
+    // Normalize the file path or throw an error if it's missing
+    const filePath = normalizeRemotePath(wsReq.query.path);
+    if (!filePath) {
+        ws.send(JSON.stringify({
+            success: false,
+            error: 'Missing path'
+        }));
+        return ws.close();
+    }
+    // Listen for messages
+    console.log(`Websocket opened to append to ${req.connectionOpts.username}@${req.connectionOpts.host}:${req.connectionOpts.port} ${filePath}`);
+    let isWriting = false;
+    ws.on('message', async(data) => {
+        // If we're already writing, send an error
+        if (isWriting) {
+            return ws.send(JSON.stringify({
+                success: false,
+                error: 'Writing in progress'
+            }));
+        }
+        try {
+            // Append the data to the file
+            isWriting = true;
+            await session.append(data, filePath);
+            ws.send(JSON.stringify({ success: true }));
+        } catch (error) {
+            ws.send(JSON.stringify({
+                success: false,
+                error: error.toString()
+            }));
+            return ws.close();
+        }
+        isWriting = false;
+        // Update the session activity
+        const hash = getObjectHash(req.connectionOpts);
+        sessionActivity[hash] = Date.now();
+    });
+    // Send a ready message
+    ws.send(JSON.stringify({ success: true, status: 'ready' }));
+});
+srv.delete('/api/sftp/files/delete', initApi, async(req, res) => {
     /** @type {sftp} */
     const session = req.session;
     res.data.path = normalizeRemotePath(req.query.path);
@@ -182,7 +255,7 @@ srv.delete('/api/sftp/files/delete', async(req, res) => {
         res.sendError(error);
     }
 });
-srv.put('/api/sftp/files/move', async(req, res) => {
+srv.put('/api/sftp/files/move', initApi, async(req, res) => {
     /** @type {sftp} */
     const session = req.session;
     res.data.pathOld = normalizeRemotePath(req.query.pathOld);
@@ -196,7 +269,7 @@ srv.put('/api/sftp/files/move', async(req, res) => {
         res.sendError(error);
     }
 });
-srv.put('/api/sftp/files/copy', async(req, res) => {
+srv.put('/api/sftp/files/copy', initApi, async(req, res) => {
     /** @type {sftp} */
     const session = req.session;
     res.data.pathSrc = normalizeRemotePath(req.query.pathSrc);
@@ -210,7 +283,7 @@ srv.put('/api/sftp/files/copy', async(req, res) => {
         res.sendError(error);
     }
 });
-srv.get('/api/sftp/files/stat', async(req, res) => {
+srv.get('/api/sftp/files/stat', initApi, async(req, res) => {
     /** @type {sftp} */
     const session = req.session;
     res.data.path = normalizeRemotePath(req.query.path);
@@ -338,7 +411,7 @@ const downloadMultiFileHandler = async(connectionOpts, res, remotePaths, rootPat
         res.status(400).end();
     }
 };
-srv.get('/api/sftp/files/get/single', async(req, res) => {
+srv.get('/api/sftp/files/get/single', initApi, async(req, res) => {
     /** @type {sftp} */
     const session = req.session;
     // Get the normalized path and throw an error if it's missing
@@ -353,7 +426,7 @@ srv.get('/api/sftp/files/get/single', async(req, res) => {
     }
 });
 const rawDownloads = {};
-srv.get('/api/sftp/files/get/single/url', async(req, res) => {
+srv.get('/api/sftp/files/get/single/url', initApi, async(req, res) => {
     /** @type {sftp} */
     const session = req.session;
     // Get the normalized path and throw an error if it's missing
@@ -381,7 +454,7 @@ srv.get('/api/sftp/files/get/single/url', async(req, res) => {
     }
     res.sendData();
 });
-srv.get('/api/sftp/files/get/multi/url', async(req, res) => {
+srv.get('/api/sftp/files/get/multi/url', initApi, async(req, res) => {
     try {
         // Get the normalized path and throw an error if it's missing
         res.data.paths = JSON.parse(req.query.paths);
@@ -443,7 +516,7 @@ setInterval(() => {
     for (const hash in sessions) {
         const lastActive = sessionActivity[hash];
         if (!lastActive) continue;
-        if ((Date.now()-lastActive) > 1000*60) {
+        if ((Date.now()-lastActive) > 1000*60*5) {
             console.log(`Deleting inactive session`);
             sessions[hash].end();
             delete sessions[hash];
