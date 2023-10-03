@@ -28,26 +28,59 @@ const elProgressBar = $('#progressBar');
 const elStatusBar = $('#statusBar');
 const log = [];
 const forceTileViewWidth = 720;
+/** The hostname of the API */
 let apiHost = window.location.host;
+/** An object of saved connection information */
 let connections = JSON.parse(window.localStorage.getItem('connections')) || {};
+/** The current active connection */
 let activeConnection = null;
+/** The ID of the current active connection */
 let activeConnectionId = null;
+/** An array of paths in the back history */
 let backPaths = [];
+/** An array of paths in the forward history */
 let forwardPaths = [];
+/** An array of paths cut or copied to the clipboard */
 let selectionClipboard = [];
+/** True the clipboard paste mode is cut */
 let isClipboardCut = false;
+/**
+ * The current file sort order
+ * @type {'name'|'size'|'date'}
+ */
 let sortType = window.localStorage.getItem('sortType') || 'name';
+/** 
+ * True of the file sort order is to be reversed
+ * @type {boolean}
+ */
 let sortDesc = window.localStorage.getItem('sortDesc');
-sortDesc = (sortDesc == null) ? false : (sortDesc === 'true')
+sortDesc = (sortDesc == null) ? false : (sortDesc === 'true');
+/** 
+ * True of hidden files should be visible
+ * @type {boolean}
+ */
 let showHidden = window.localStorage.getItem('showHidden');
 showHidden = (showHidden == null) ? true : (showHidden === 'true');
+/**
+ * The current file view mode
+ * @type {'list'|'tile'}
+ */
 let viewMode = window.localStorage.getItem('viewMode') || 'list';
+/** True if an upload is in progress */
 let isUploading = false;
+/** The index of the most recently selected file, or -1 if no files are selected */
 let lastSelectedIndex = -1;
+/** True of a directory load is in progress
+ * and currently visible files shouldn't be accessed */
 let fileAccessLock = false;
 
-// GPT-4-generated function to check if two HTML elements overlap
-function doElementsOverlap(el1, el2) {
+/**
+ * Checks if two HTML elements overlap
+ * @param {HTMLElement} el1 The first element
+ * @param {HTMLElement} el2 The second element
+ * @returns {boolean} True if the elements overlap, false otherwise
+ */
+function checkDoElementsOverlap(el1, el2) {
     const rect1 = el1.getBoundingClientRect();
     const rect2 = el2.getBoundingClientRect();
 
@@ -59,12 +92,18 @@ function doElementsOverlap(el1, el2) {
     return overlap;
 }
 
+/**
+ * Returns a boolean representing if the device has limited input capabilities (no hover and coarse pointer)
+ */
 const getIsMobileDevice = () => {
     const isPointerCoarse = window.matchMedia('(pointer: coarse)').matches;
     const isHoverNone = window.matchMedia('(hover: none)').matches;
     return isPointerCoarse && isHoverNone;
 }
 
+/**
+ * Returns an object of headers for API requests that interface with the current active server
+ */
 const getHeaders = () => {
     const headers = {
         'sftp-host': activeConnection.host,
@@ -79,6 +118,15 @@ const getHeaders = () => {
 }
 
 const api = {
+    /**
+     * Makes requests to the API
+     * @param {'get'|'post'|'put'|'delete'} method The request method
+     * @param {string} url The sub-URL of an API endpoint
+     * @param {object|undefined} params An object of key-value query params
+     * @param {*} body The body of the request, if applicable
+     * @param {callback|undefined} onProgress A callback function that gets passed an Axios progress event
+     * @returns {object} An object representing the response data or error info
+     */
     request: async (method, url, params, body = null, onProgress = () => {}) => {
         url = `https://${apiHost}/api/sftp/${url}`;
         try {
@@ -113,10 +161,16 @@ const api = {
     delete: (url, params) => api.request('delete', url, params)
 };
 
+/**
+ * Saves the current state of the `connections` object to LocalStorage.
+ */
 const saveConnections = () => {
     window.localStorage.setItem('connections', JSON.stringify(connections));
 }
 
+/**
+ * Opens a dialog popup to manage stored connection information.
+ */
 const connectionManagerDialog = () => {
     const popup = new PopupBuilder();
     const el = document.createElement('div');
@@ -282,6 +336,11 @@ const connectionManagerDialog = () => {
     popup.show();
 }
 
+/**
+ * Opens a dialog to edit an existing connection by its ID.
+ * @param {number} id The connection ID
+ * @returns {Promise<number>} Resolves with the ID passed in
+ */
 const editConnectionDialog = async (id) => new Promise(resolve => {
     const connection = connections[id];
     if (!connection) throw new Error(`Connection with ID ${id} not found!`);
@@ -412,6 +471,9 @@ const editConnectionDialog = async (id) => new Promise(resolve => {
     popup.setOnHide(() => resolve(id));
 });
 
+/**
+ * Adds a new connection with basic placeholder data and runs `editConnectionDialog()` on it.
+ */
 const addNewConnectionDialog = async() => {
     const id = Date.now();
     connections[id] = {
@@ -429,6 +491,11 @@ const addNewConnectionDialog = async() => {
     }
 }
 
+/**
+ * Sets the active connection to the one with the specified ID.
+ * @param {number} id The connection ID
+ * @param {string} path An initial directory path to override the saved one
+ */
 const setActiveConnection = (id, path) => {
     if (!connections[id]) {
         throw new Error(`Connection with ID ${id} not found!`);
@@ -441,6 +508,13 @@ const setActiveConnection = (id, path) => {
     changePath(path, false);
 }
 
+/**
+ * Updates the bottom status bar.
+ * @param {string} status The status text
+ * @param {boolean} isError If `true`, turns the status red
+ * @param {number|null} progress A 0-100 whole number to be used for the progress bar, or `null` to hide it
+ * @returns {boolean} The negation of `isError`
+ */
 const setStatus = (status, isError = false, progress = null) => {
     elStatusBar.innerHTML = status;
     elStatusBar.classList.toggle('error', isError);
@@ -452,8 +526,14 @@ const setStatus = (status, isError = false, progress = null) => {
     log.push({
         isError, status
     });
+    return !isError;
 }
 
+/**
+ * Changes the path and loads the directory or file.
+ * @param {string} path The target path
+ * @param {boolean} pushState If `true`, update the back/forward history
+ */
 const changePath = async(path, pushState = true) => {
     loadStartTime = Date.now();
     if (!activeConnection) return;
@@ -499,6 +579,10 @@ const changePath = async(path, pushState = true) => {
     btnGo.disabled = false;
 }
 
+/**
+ * Loads a directory and populates the file list.
+ * @param {string} path The directory path
+ */
 const loadDirectory = async path => {
     // Hide the file view
     elFiles.style.transition = 'none';
@@ -571,6 +655,12 @@ const loadDirectory = async path => {
     }
 }
 
+/**
+ * Generates a file list entry element with the data for a given file.
+ * @param {object} file A file object returned from the directory list API
+ * @param {string} path The path of the file
+ * @returns {HTMLElement}
+ */
 const getFileEntryElement = (file, path) => {
     const elFile = document.createElement('button');
     elFile.classList = 'btn fileEntry row';
@@ -750,6 +840,10 @@ const getFileEntryElement = (file, path) => {
     return elFile;
 }
 
+/**
+ * Displays a context menu with actions for the selected file(s).
+ * @param {HTMLElement} elDisplay An HTML element to display the menu relative to
+ */
 const fileContextMenu = (elDisplay = null) => {
     const allVisibleFiles = [...$$('#files .fileEntry:not(.hidden)', elFiles)];
     if (showHidden)
@@ -877,6 +971,9 @@ const fileContextMenu = (elDisplay = null) => {
     }
 }
 
+/**
+ * Sorts the current file list using `sortType` and `sortDesc`.
+ */
 const sortFiles = () => {
     // Define sorting functions
     const sortFuncs = {
@@ -915,18 +1012,30 @@ const sortFiles = () => {
     }
 }
 
+/**
+ * Changes the file sort type and re-sorts the file list.
+ * @param {sortType} type The new sort type
+ */
 const changeFileSortType = type => {
     sortType = type;
     window.localStorage.setItem('sortType', sortType);
     sortFiles();
 }
 
-const changeFileSortDirection = desc => {
-    sortDesc = desc;
+/**
+ * Changes the file sort direction and re-sorts the file list.
+ * @param {sortDesc} descending
+ */
+const changeFileSortDirection = descending => {
+    sortDesc = descending;
     window.localStorage.setItem('sortDesc', sortDesc);
     sortFiles();
 }
 
+/**
+ * Changes the file view mode and updates the file list.
+ * @param {viewMode} type The new view mode
+ */
 const changeFileViewMode = type => {
     if (type == 'list' && window.innerWidth < forceTileViewWidth) {
         return new PopupBuilder()
@@ -942,16 +1051,26 @@ const changeFileViewMode = type => {
     elFileColHeadings.classList.toggle('tiles', type == 'tiles');
 }
 
+/** Toggles the visibility of hidden files. */
 const toggleHiddenFileVisibility = () => {
     showHidden = !showHidden;
     window.localStorage.setItem('showHidden', showHidden);
     elFiles.classList.toggle('showHidden', showHidden);
 }
 
+/**
+ * Loads a file. For now, this just calls `downloadFile()`.
+ * @param {string} path The file path
+ */
 const loadFile = async path => {
     downloadFile(path);
 }
 
+/**
+ * Resolves with a download URL for a single file, or `false` if an error occurred.
+ * @param {string} path The file path
+ * @returns {Promise<string|boolean>}
+ */
 const getFileDownloadUrl = async path => {
     setStatus(`Getting single file download URL...`);
     const res = await api.get('files/get/single/url', {
@@ -966,6 +1085,10 @@ const getFileDownloadUrl = async path => {
     return false;
 }
 
+/**
+ * Starts a single-file download.
+ * @param {string} path The file path
+ */
 const downloadFile = async path => {
     const url = await getFileDownloadUrl(path);
     if (url) {
@@ -974,6 +1097,12 @@ const downloadFile = async path => {
     }
 }
 
+/**
+ * Resolves with a download URL for a zip file containing all of the files and directories specified, or `false` if an error occurred.
+ * @param {string[]} paths An array of file and/or directory paths
+ * @param {string} rootPath The directory path to start at inside the zip file - leave undefined to use `'/'`
+ * @returns {Promise<string|boolean>}
+ */
 const getZipDownloadUrl = async(paths, rootPath = '/') => {
     const pathsJson = JSON.stringify(paths);
     if ((pathsJson.length+rootPath.length) > 1900) {
@@ -993,6 +1122,11 @@ const getZipDownloadUrl = async(paths, rootPath = '/') => {
     return false;
 }
 
+/**
+ * Starts a zip file download for all of the paths specified.
+ * @param {string[]} paths An array of file and/or directory paths
+ * @param {string} [rootPath='/'] The directory path to start at inside the zip file
+ */
 const downloadZip = async(paths, rootPath = '/') => {
     const url = await getZipDownloadUrl(paths, rootPath);
     if (url) {
@@ -1001,6 +1135,9 @@ const downloadZip = async(paths, rootPath = '/') => {
     }
 }
 
+/**
+ * Updates the disabled/enabled state of all control buttons depending on the currently selected file entries.
+ */
 const updateDirControls = () => {
     const selectedFiles = $$('.selected', elFiles);
     btnSelectionCut.disabled = true;
@@ -1034,8 +1171,19 @@ const updateDirControls = () => {
     }
 }
 
-const getSelectedFiles = () => $$('.selected', elFiles);
+/**
+ * An array of all selected file elements.
+ * @returns {HTMLElement[]}
+ */
+const getSelectedFiles = () => [...$$('.selected', elFiles)];
 
+/**
+ * Updates the selected state of the file element with the specified path.
+ * @param {string} path The path of the file to select in the list
+ * @param {boolean} [deselectOthers] If `true`, other files will be deselected - defaults to `true`
+ * @param {boolean} [toggle] If `true`, toggle the selected state of this file - defaults to `false`
+ * @param {boolean} [focus] If `true`, focus this file element in the list - defaults to `false`
+ */
 const selectFile = (path, deselectOthers = true, toggle = false, focus = false) => {
     const el = $(`.fileEntry[data-path="${path}"]`, elFiles);
     if (!el) return;
@@ -1052,6 +1200,9 @@ const selectFile = (path, deselectOthers = true, toggle = false, focus = false) 
     updateDirControls();
 }
 
+/**
+ * Selects all files in the file list, excluding hidden ones if they aren't visible.
+ */
 const selectAllFiles = () => {
     const files = [...$$('.fileEntry', elFiles)];
     files.shift();
@@ -1063,6 +1214,9 @@ const selectAllFiles = () => {
     updateDirControls();
 }
 
+/**
+ * Deselects all files in the file list.
+ */
 const deselectAllFiles = () => {
     const selected = getSelectedFiles();
     for (const el of selected) {
@@ -1072,6 +1226,9 @@ const deselectAllFiles = () => {
     updateDirControls();
 }
 
+/**
+ * Deselects all invisible files in the file list. Nothing will happen if hidden files are visible.
+ */
 const deselectHiddenFiles = () => {
     if (showHidden) return;
     const hidden = [...$$('.hidden', elFiles)];
@@ -1081,6 +1238,9 @@ const deselectHiddenFiles = () => {
     updateDirControls();
 }
 
+/**
+ * Inverts the current file selection, only including visible files.
+ */
 const invertFileSelection = () => {
     const files = [...$$('#files .fileEntry', elFiles)];
     files.shift();
@@ -1092,12 +1252,19 @@ const invertFileSelection = () => {
     updateDirControls();
 }
 
+/**
+ * Returns `true` if there are currently files selected, `false` otherwise.
+ * @returns {boolean}
+ */
 const checkIsSelecting = () => {
     const selected = getSelectedFiles();
     return selected.length > 0;
 }
 
-const createDirectoryDialog = async() => {
+/**
+ * Opens a dialog prompting the user to create a directory.
+ */
+const createDirectoryDialog = () => {
     const el = document.createElement('div');
     el.innerHTML = /*html*/`
         <div style="width: 300px; max-width: 100%">
@@ -1133,6 +1300,10 @@ const createDirectoryDialog = async() => {
     });
 }
 
+/**
+ * Opens a dialog prompting the user to rename the file with the specified path.
+ * @param {string} path The file path
+ */
 const renameFileDialog = async path => {
     const el = document.createElement('div');
     const currentName = path.split('/').pop();
@@ -1183,6 +1354,13 @@ const renameFileDialog = async path => {
     });
 }
 
+/**
+ * Opens a dialog prompting the user to select a directory with an interactive browser.
+ * @param {string} [startPath] The directory to start in
+ * @param {string} [title] The popup title
+ * @param {string} [actionLabel] The label of the confirm button
+ * @returns {Promise<string|null>} A promise resolving to the selected directory path, or `null` if cancelled
+ */
 const selectDirDialog = async(startPath = activeConnection.path, title = 'Select folder', actionLabel = 'Select') => new Promise(resolve => {
     const el = document.createElement('div');
     el.innerHTML = /*html*/`
@@ -1245,6 +1423,12 @@ const selectDirDialog = async(startPath = activeConnection.path, title = 'Select
         .show();
 });
 
+/**
+ * Moves files from their original directories into a single new directory while keeping their names.
+ * @param {string} newDirPath The new directory
+ * @param {string[]} filePaths An array of file paths to move
+ * @returns {Promise<string[]|null>} An array of new paths of the files successfully moved, or `null` if no files were moved
+ */
 const moveFiles = async(newDirPath, filePaths) => {
     // Loop through selected files
     const newPaths = [];
@@ -1276,7 +1460,7 @@ const moveFiles = async(newDirPath, filePaths) => {
         });
         if (data.error) {
             setStatus(`Error: ${data.error}`, true);
-            return false;
+            break;
         }
         const el = $(`#files .fileEntry[data-path="${pathOld}"]`, elFiles);
         if (el) el.remove();
@@ -1286,9 +1470,15 @@ const moveFiles = async(newDirPath, filePaths) => {
         setStatus(`Moved ${newPaths.length} file(s) to ${newDirPath}`);
         return newPaths;
     }
-    return false;
+    return null;
 }
 
+/**
+ * Copies files into the provided directory.
+ * @param {string} newDirPath The target directory
+ * @param {string[]} filePaths An array of file paths to copy
+ * @returns {Promise<string[]|null>} An array of new paths of the files successfully copied, or `null` if no files were copied
+ */
 const copyFiles = async(newDirPath, filePaths) => {
     // Loop through selected files
     const newPaths = [];
@@ -1331,25 +1521,35 @@ const copyFiles = async(newDirPath, filePaths) => {
     return false;
 }
 
+/**
+ * Opens a dialog prompting the user to select a directory to transfer the selected files to.
+ * @param {boolean} copy If `true`, copy the files instead of moving them
+ * @returns {Promise<string[]|null>} An array of new file paths, or `null` if no files were transferred
+ */
 const moveFilesDialog = async(copy = false) => {
     const selectedPaths = [...getSelectedFiles()].map(el => el.dataset.path);
     // Prompt the user to select a directory
     const newDirPath = await selectDirDialog(undefined, `${copy ? 'Copy':'Move'} ${selectedPaths.length > 1 ? `${selectedPaths.length} files`:'file'}`, `${copy ? 'Copy':'Move'} here`);
-    if (!newDirPath) return;
+    if (!newDirPath) return null;
     // Move or copy the files
     if (copy)
-        copyFiles(newDirPath, selectedPaths);
+        return copyFiles(newDirPath, selectedPaths);
     else
-        moveFiles(newDirPath, selectedPaths);
+        return moveFiles(newDirPath, selectedPaths);
 }
 
-const replaceDialog = path => new Promise(resolve => {
+/**
+ * Prompts the user if they want to skip or replace the current file in the current transfer process, with the additional option of doing this for the all remaining conflicts.
+ * @param {string} fileName The file's name or path to display to the user
+ * @returns {Promise<'skip'|'skipAll'|'replace'|'replaceAll'>} One of 4 states representing the user's choice: `skip`, `skipAll`, `replace`, `replaceAll`
+ */
+const replaceDialog = fileName => new Promise(resolve => {
     const el = document.createElement('div');
     el.innerHTML = `
-        <p><b>${path}</b> already exists. Do you want to replace it?</p>
+        <p><b>${fileName}</b> already exists. Do you want to replace it?</p>
         <label class="selectOption">
             <input type="checkbox">
-            Do this for all other files
+            Do this for all remaining conflicts
         </label>
     `;
     const checkbox = $('input', el);
@@ -1366,7 +1566,11 @@ const replaceDialog = path => new Promise(resolve => {
         .show();
 });
 
-const uploadFiles = async files => {
+/**
+ * Uploads input files to the active server.
+ * @param {FileSystemHandle[]} inputFiles The input files
+ */
+const uploadFiles = async inputFiles => {
     if (isUploading) return new PopupBuilder()
         .setTitle('Upload in progress')
         .addBodyHTML('<p>An upload is already in progress. Wait for it to finish before uploading more files.</p>')
@@ -1390,7 +1594,7 @@ const uploadFiles = async files => {
     let startTime = Date.now();
     let totalBytesUploaded = 0;
     const paths = [];
-    for (const file of files) {
+    for (const file of inputFiles) {
         if (isCancelled) break;
         setUploadStatus(`Uploading file: ${file.name}`);
         // Check if the path exists
@@ -1503,6 +1707,9 @@ const uploadFiles = async files => {
     }
 }
 
+/**
+ * Opens a system file picker and uploads the selected files to the active server.
+ */
 const uploadFilesPrompt = async() => {
     // Prompt user to select files
     const input = document.createElement('input');
@@ -1515,6 +1722,12 @@ const uploadFilesPrompt = async() => {
     });
 }
 
+/**
+ * Deletes a file from the active server.
+ * @param {string} path The file path
+ * @param {boolean} refresh If `true`, refresh the file list after deleting the file - defaults to `true`
+ * @returns {Promise<Object>} The API response object
+ */
 const deleteFile = async(path, refresh = true) => {
     const data = await api.delete('files/delete', { path: path });
     if (data.error) {
@@ -1526,6 +1739,12 @@ const deleteFile = async(path, refresh = true) => {
     return data;
 }
 
+/**
+ * Deletes a directory from the active server.
+ * @param {string} path The directory path
+ * @param {boolean} refresh If `true`, refresh the file list after deleting the directory - defaults to `true`
+ * @returns {Promise<Object>} The API response object
+ */
 const deleteDirectory = async(path, refresh = true) => {
     const data = await api.delete('directories/delete', { path: path });
     if (data.error) {
@@ -1537,6 +1756,13 @@ const deleteDirectory = async(path, refresh = true) => {
     return data;
 }
 
+/**
+ * Shows a context menu containing a set of navigable file paths.
+ * @param {Event} e The `ContextMenu` event
+ * @param {HTMLElement} btn The button that was clicked
+ * @param {string[]} paths An array of paths to show in the menu
+ * @param {ContextMenuBuilder} menu An existing menu object to add items to
+ */
 const historyContextMenu = (e, btn, paths, menu = new ContextMenuBuilder()) => {
     if (btn.disabled) return;
     e.preventDefault();
