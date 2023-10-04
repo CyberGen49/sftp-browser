@@ -28,8 +28,15 @@ const elProgressBar = $('#progressBar');
 const elStatusBar = $('#statusBar');
 const log = [];
 const forceTileViewWidth = 720;
-/** The hostname of the API */
-let apiHost = window.location.host;
+const isElectron = window && window.process && window.process.type;
+/** 
+ * The hostname of the API
+ * @type {string}
+ */
+let apiHost = window.localStorage.getItem('apiHost') || window.location.host;
+let isLocalhost = window.location.hostname == 'localhost';
+let httpProtocol = isLocalhost ? 'http' : 'https';
+let wsProtocol = httpProtocol == 'http' ? 'ws' : 'wss';
 /** An object of saved connection information */
 let connections = JSON.parse(window.localStorage.getItem('connections')) || {};
 /** The current active connection */
@@ -92,6 +99,13 @@ function checkDoElementsOverlap(el1, el2) {
     return overlap;
 }
 
+const downloadUrl = url => {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = '';
+    a.click();
+}
+
 /**
  * Returns a boolean representing if the device has limited input capabilities (no hover and coarse pointer)
  */
@@ -128,7 +142,7 @@ const api = {
      * @returns {object} An object representing the response data or error info
      */
     request: async (method, url, params, body = null, onProgress = () => {}) => {
-        url = `https://${apiHost}/api/sftp/${url}`;
+        url = `${httpProtocol}://${apiHost}/api/sftp/${url}`;
         try {
             const opts = {
                 params, headers: getHeaders(),
@@ -179,22 +193,25 @@ const connectionManagerDialog = () => {
     for (const id in connections) {
         const connection = connections[id];
         const entry = document.createElement('div');
-        entry.classList = 'entry row align-center flex-wrap';
+        entry.classList = 'entry row gap-10 align-center';
         entry.innerHTML = /*html*/`
-            <div class="row gap-10 align-center flex-grow">
-                <div class="icon">cloud</div>
-                <div class="col gap-5">
+            <div class="icon flex-no-shrink">cloud</div>
+            <div class="row flex-wrap align-center flex-grow">
+                <div class="col gap-5 flex-grow">
                     <div class="label">${connection.name}</div>
-                    <small>${connection.username}@${connection.host}:${connection.port}<br>${connection.path}</small>
+                    <small>
+                        ${connection.username}@${connection.host}:${connection.port}
+                        <br>${connection.path}
+                    </small>
                 </div>
-            </div>
-            <div class="row gap-10 flex-wrap align-center justify-center">
-                <button class="menu btn iconOnly small secondary" title="Connection options">
-                    <div class="icon">more_vert</div>
-                </button>
-                <button class="connect btn iconOnly small" title="Connect">
-                    <div class="icon">arrow_forward</div>
-                </button>
+                <div class="row gap-10">
+                    <button class="menu btn iconOnly small secondary" title="Connection options">
+                        <div class="icon">more_vert</div>
+                    </button>
+                    <button class="connect btn iconOnly small" title="Connect">
+                        <div class="icon">arrow_forward</div>
+                    </button>
+                </div>
             </div>
         `;
         $('.btn.menu', entry).addEventListener('click', () => {
@@ -344,7 +361,7 @@ const connectionManagerDialog = () => {
 const editConnectionDialog = async (id) => new Promise(resolve => {
     const connection = connections[id];
     if (!connection) throw new Error(`Connection with ID ${id} not found!`);
-    const securityNote = thing => `Your ${thing} is saved in this browser and only persists on the server during and for a minute after requests.`;
+    const securityNote = thing => `Your ${thing} is saved in this browser and only persists on the server during and for a few minutes after each request.`;
     const el = document.createElement('div');
     el.classList = 'col gap-10';
     el.innerHTML = /*html*/`
@@ -658,10 +675,10 @@ const loadDirectory = async path => {
 /**
  * Generates a file list entry element with the data for a given file.
  * @param {object} file A file object returned from the directory list API
- * @param {string} path The path of the file
+ * @param {string} dirPath The path of the directory containing this file
  * @returns {HTMLElement}
  */
-const getFileEntryElement = (file, path) => {
+const getFileEntryElement = (file, dirPath) => {
     const elFile = document.createElement('button');
     elFile.classList = 'btn fileEntry row';
     // If the file is "hidden", give it the class
@@ -669,7 +686,7 @@ const getFileEntryElement = (file, path) => {
         elFile.classList.add('hidden');
     }
     // Add data attributes to the file element
-    elFile.dataset.path = `${path}/${file.name}`;
+    elFile.dataset.path = `${dirPath}/${file.name}`;
     elFile.dataset.type = file.type;
     elFile.dataset.name = file.name;
     elFile.dataset.size = file.size;
@@ -811,31 +828,36 @@ const getFileEntryElement = (file, path) => {
     // Handle mobile touch start
     let timeTouchStart = 0;
     let initialSelectTimeout = null;
-    let selectedWithTimeout = false;
+    let fileListScrollTopOnStart = 0;
     elFile.addEventListener('touchstart', e => {
         if (!getIsMobileDevice()) return;
         timeTouchStart = Date.now();
-        selectedWithTimeout = false;
+        fileListScrollTopOnStart = elFiles.scrollTop;
         if (!checkIsSelecting()) {
             initialSelectTimeout = setTimeout(() => {
                 if ((Date.now()-timeTouchStart) > 1000) return;
                 selectFile(elFile.dataset.path, true, false);
-                selectedWithTimeout = true;
                 if (navigator.vibrate) navigator.vibrate(2);
-            }, 500);
+            }, 400);
         }
     });
     // Handle mobile touch end
     elFile.addEventListener('touchend', e => {
         if (!getIsMobileDevice()) return;
         clearTimeout(initialSelectTimeout);
-        if ((Date.now()-timeTouchStart) > 1000) return;
-        if (selectedWithTimeout) return;
+        if ((Date.now()-timeTouchStart) > 380) return;
+        if (elFiles.scrollTop != fileListScrollTopOnStart) return;
         if (checkIsSelecting()) {
             selectFile(elFile.dataset.path, false, true);
         } else {
             accessFile();
         }
+    });
+    // Handle mobile touch move
+    elFile.addEventListener('touchmove', e => {
+        if (!getIsMobileDevice()) return;
+        clearTimeout(initialSelectTimeout);
+        timeTouchStart = 0;
     });
     return elFile;
 }
@@ -858,7 +880,6 @@ const fileContextMenu = (elDisplay = null) => {
     const isSingleSelected = selectedFiles.length == 1;
     const isMultiSelected = selectedFiles.length > 1;
     const isAllSelected = selectedFiles.length == allVisibleFiles.length-1;
-    console.log(selectedFiles.length, allVisibleFiles.length)
     // Build the menu
     const menu = new ContextMenuBuilder();
     if (isNoneSelected) menu.addItem(item => {
@@ -929,7 +950,7 @@ const fileContextMenu = (elDisplay = null) => {
         btnDownload.disabled ? item.disable() : item.enable();
         return item;
     });
-    menu.addItem(item => {
+    if (!isLocalhost) menu.addItem(item => {
         item.setIcon('share')
             .setLabel(`Copy download link...`)
             .setClickHandler(() => clickButton(btnShare))
@@ -947,7 +968,8 @@ const fileContextMenu = (elDisplay = null) => {
             })
         return item;
     });
-    menu.addSeparator();
+    if (allVisibleFiles.length > 1)
+        menu.addSeparator();
     if (!isAllSelected) menu.addItem(item => item
         .setIcon('select_all')
         .setLabel('Select all')
@@ -1092,7 +1114,7 @@ const getFileDownloadUrl = async path => {
 const downloadFile = async path => {
     const url = await getFileDownloadUrl(path);
     if (url) {
-        window.location.href = url;
+        downloadUrl(url);
         setStatus(`Single file download started`);
     }
 }
@@ -1130,7 +1152,7 @@ const getZipDownloadUrl = async(paths, rootPath = '/') => {
 const downloadZip = async(paths, rootPath = '/') => {
     const url = await getZipDownloadUrl(paths, rootPath);
     if (url) {
-        window.location.href = url;
+        downloadUrl(url);
         setStatus(`Zip file download started`);
     }
 }
@@ -1330,7 +1352,7 @@ const renameFileDialog = async path => {
                     const replaceStatus = await replaceDialog(pathNew);
                     if (replaceStatus == 'skip' || replaceStatus == 'skipAll')
                         return setStatus(`Rename cancelled`);
-                    await deleteFile(pathNew, false);
+                    await deleteFile(pathNew);
                 }
                 const data = await api.put('files/move', {
                     pathOld, pathNew
@@ -1453,7 +1475,7 @@ const moveFiles = async(newDirPath, filePaths) => {
                     continue;
                 }
             }
-            await deleteFile(pathNew, false);
+            await deleteFile(pathNew);
         }
         const data = await api.put('files/move', {
             pathOld, pathNew
@@ -1503,7 +1525,7 @@ const copyFiles = async(newDirPath, filePaths) => {
                     continue;
                 }
             }
-            await deleteFile(pathDest, false);
+            await deleteFile(pathDest);
         }
         const data = await api.put('files/copy', {
             pathSrc: pathSource, pathDest: pathDest
@@ -1579,6 +1601,7 @@ const uploadFiles = async inputFiles => {
     isUploading = true;
     let isCancelled = false;
     let replaceStatus = null;
+    let dirPath = activeConnection.path;
     // Handle status and progress bar
     let lastStatusSet = 0;
     const setUploadStatus = (text, progress = 0) => {
@@ -1590,6 +1613,9 @@ const uploadFiles = async inputFiles => {
         });
         lastStatusSet = Date.now();
     };
+    // Sort input files
+    inputFiles = [...inputFiles];
+    inputFiles.sort((a, b) => a.name.localeCompare(b.name));
     // Loop through selected files
     let startTime = Date.now();
     let totalBytesUploaded = 0;
@@ -1598,7 +1624,7 @@ const uploadFiles = async inputFiles => {
         if (isCancelled) break;
         setUploadStatus(`Uploading file: ${file.name}`);
         // Check if the path exists
-        let path = `${activeConnection.path}/${file.name}`;
+        let path = `${dirPath}/${file.name}`;
         const resExistenceCheck = await api.get('files/exists', { path: path });
         path = resExistenceCheck.path;
         // If the file exists, prompt the user to replace it
@@ -1612,7 +1638,7 @@ const uploadFiles = async inputFiles => {
                     continue;
                 }
             }
-            const resDelete = await deleteFile(path, false);
+            const resDelete = await deleteFile(path);
             if (resDelete.error) return;
         }
         // Make a promise to upload the file
@@ -1622,7 +1648,7 @@ const uploadFiles = async inputFiles => {
             const resSocketKey = await api.get('key');
             const key = resSocketKey.key;
             // Connect to the file append websocket
-            const url = `wss://${apiHost}/api/sftp/files/append?path=${encodeURIComponent(path)}&key=${key}`;
+            const url = `${wsProtocol}://${apiHost}/api/sftp/files/append?path=${encodeURIComponent(path)}&key=${key}`;
             const ws = new WebSocket(url);
             // Resolve with error if the websocket closes or errors
             // before the upload is complete
@@ -1690,21 +1716,34 @@ const uploadFiles = async inputFiles => {
         if (!isUploading) return;
         // If the upload was cancelled, delete the file
         if (isCancelled) {
-            console.log('t')
-            await deleteFile(path, false);
+            await deleteFile(path);
             setStatus(`Upload cancelled`);
             break;
         }
         // Add the path to the list of uploaded files
         paths.push(path);
+        // Add the file to the file list
+        if (dirPath == activeConnection.path) {
+            const elExisting = $(`.fileEntry[data-path="${path}"]`, elFiles);
+            if (elExisting) elExisting.remove();
+            const elFile = getFileEntryElement({
+                name: file.name,
+                type: '-',
+                size: file.size,
+                modifyTime: Date.now(),
+                longname: '-'
+            }, dirPath);
+            $('.section.files', elFiles).appendChild(elFile);
+            sortFiles();
+        }
     }
-    // Refresh the file list and select the uploaded files
     isUploading = false;
     if (paths.length == 0) return;
-    await changePath(paths[0].split('/').slice(0, -1).join('/'));
+    // Select all new files
     for (const path of paths) {
         selectFile(path, false, false, true);
     }
+    setStatus(`Uploaded ${paths.length} file(s)`);
 }
 
 /**
@@ -1728,13 +1767,13 @@ const uploadFilesPrompt = async() => {
  * @param {boolean} refresh If `true`, refresh the file list after deleting the file - defaults to `true`
  * @returns {Promise<Object>} The API response object
  */
-const deleteFile = async(path, refresh = true) => {
+const deleteFile = async(path) => {
     const data = await api.delete('files/delete', { path: path });
     if (data.error) {
         setStatus(`Error: ${data.error}`, true);
     } else {
-        if (refresh)
-            changePath();
+        const elFile = $(`.fileEntry[data-path="${path}"]`, elFiles);
+        if (elFile) elFile.remove();
     }
     return data;
 }
@@ -1745,13 +1784,13 @@ const deleteFile = async(path, refresh = true) => {
  * @param {boolean} refresh If `true`, refresh the file list after deleting the directory - defaults to `true`
  * @returns {Promise<Object>} The API response object
  */
-const deleteDirectory = async(path, refresh = true) => {
+const deleteDirectory = async(path) => {
     const data = await api.delete('directories/delete', { path: path });
     if (data.error) {
         setStatus(`Error: ${data.error}`, true);
     } else {
-        if (refresh)
-            changePath();
+        const elFile = $(`.fileEntry[data-path="${path}"]`, elFiles);
+        if (elFile) elFile.remove();
     }
     return data;
 }
@@ -1813,6 +1852,12 @@ btnConnections.addEventListener('click', () => {
         .setLabel('New connection...')
         .setIcon('library_add')
         .setClickHandler(addNewConnectionDialog));
+    menu.addSeparator().addItem(item => item
+        .setIcon('code')
+        .setLabel('SFTP Browser GitHub')
+        .setClickHandler(() => {
+            window.open('https://github.com/CyberGen49/sftp-browser');
+        }));
     const rect = btnConnections.getBoundingClientRect();
     menu.showAtCoords(rect.left, rect.bottom-5);
 });
@@ -1988,12 +2033,10 @@ btnSelectionDelete.addEventListener('click', async() => {
                     setStatus(`Deleting file: ${el.dataset.path}`, false, Math.round((i/selected.length)*100));
                     let res = null;
                     if (el.dataset.type === 'd') {
-                        res = await deleteDirectory(el.dataset.path, false);
+                        res = await deleteDirectory(el.dataset.path);
                     } else {
-                        res = await deleteFile(el.dataset.path, false);
+                        res = await deleteFile(el.dataset.path);
                     }
-                    if (res.success)
-                        el.remove();
                     i++;
                 }
                 setStatus(`Deleted ${selected.length} file(s)`);
@@ -2050,6 +2093,7 @@ btnShare.addEventListener('click', async() => {
         .addAction(action => action.setLabel('Cancel'))
         .show();
 });
+if (isLocalhost) btnShare.style.display = 'none';
 
 btnDirView.addEventListener('click', () => {
     const menu = new ContextMenuBuilder();
@@ -2243,3 +2287,14 @@ window.addEventListener('load', async() => {
     }
     window.dispatchEvent(new Event('resize'));
 });
+
+// Dynamically update file list relative dates
+setInterval(() => {
+    const els = $$('.fileEntry[data-date]', elFiles);
+    for (const el of els) {
+        const timestamp = parseInt(el.dataset.date);
+        if (!timestamp) continue;
+        const elDateMain = $('.date', el);
+        elDateMain.innerText = getRelativeDate(timestamp);
+    }
+}, 1000*60);

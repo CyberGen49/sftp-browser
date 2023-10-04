@@ -1,5 +1,4 @@
 
-const fs = require('fs');
 const path = require('path');
 const express = require('express');
 const expressWs = require('express-ws');
@@ -18,9 +17,11 @@ const dayjs = require('dayjs');
 const dayjsAdvancedFormat = require('dayjs/plugin/advancedFormat');
 dayjs.extend(dayjsAdvancedFormat);
 const utils = require('web-resources');
+const Electron = require('electron');
+const config = require('./config.json');
 
 const normalizeRemotePath = remotePath => {
-    remotePath = path.normalize(remotePath);
+    remotePath = path.normalize(remotePath).replace(/\\/g, '/');
     const split = remotePath.split('/').filter(String);
     const joined = `/${split.join('/')}`;
     return joined;
@@ -70,7 +71,9 @@ expressWs(srv, undefined, {
     }
 });
 srv.use(logger());
-srv.use(express.static('web'));
+const staticDir = path.join(__dirname, 'web');
+srv.use(express.static(staticDir));
+console.log(`Serving static files from ${staticDir}`);
 
 const initApi = asyncHandler(async(req, res, next) => {
     res.sendData = (status = 200) => res.status(status).json(res.data);
@@ -184,9 +187,6 @@ srv.get('/api/sftp/key', initApi, async(req, res) => {
     res.sendData();
 });
 srv.ws('/api/sftp/files/append', async(ws, wsReq) => {
-    ws.on('close', () => {
-        console.log(`File append websocket closed`);
-    });
     if (!wsReq.query.key) return ws.close();
     const req = keyedRequests[wsReq.query.key];
     if (!req) return ws.close();
@@ -196,6 +196,7 @@ srv.ws('/api/sftp/files/append', async(ws, wsReq) => {
     // Create the session and throw an error if it fails
     /** @type {sftp} */
     const session = await getSession(null, req.connectionOpts);
+    const sessionHash = getObjectHash(req.connectionOpts);
     if (!session) {
         ws.send(JSON.stringify({
             success: false,
@@ -212,6 +213,12 @@ srv.ws('/api/sftp/files/append', async(ws, wsReq) => {
         }));
         return ws.close();
     }
+    // Handle websocket closure
+    ws.on('close', () => {
+        console.log(`File append websocket closed`);
+        session.end();
+        delete sessionActivity[sessionHash];
+    });
     // Listen for messages
     console.log(`Websocket opened to append to ${req.connectionOpts.username}@${req.connectionOpts.host}:${req.connectionOpts.port} ${filePath}`);
     let isWriting = false;
@@ -237,8 +244,7 @@ srv.ws('/api/sftp/files/append', async(ws, wsReq) => {
         }
         isWriting = false;
         // Update the session activity
-        const hash = getObjectHash(req.connectionOpts);
-        sessionActivity[hash] = Date.now();
+        sessionActivity[sessionHash] = Date.now();
     });
     // Send a ready message
     ws.send(JSON.stringify({ success: true, status: 'ready' }));
@@ -508,9 +514,6 @@ srv.get('/dl/:id', async(req, res) => {
 
 srv.use((req, res) => res.status(404).end());
 
-const port = 8261;
-srv.listen(port, () => console.log(`Listening on port ${port}`));
-
 setInterval(() => {
     // Delete inactive sessions
     for (const hash in sessions) {
@@ -532,3 +535,30 @@ setInterval(() => {
         }
     }
 }, 1000*30);
+
+if (Electron.app) {
+    Electron.app.whenReady().then(async() => {
+        // Start the server
+        let port = 8001+Math.floor(Math.random()*999);
+        await new Promise(resolve => {
+            srv.listen(port, () => {
+                console.log(`App server listening on port ${port}`)
+                resolve();
+            });
+        });
+        // Open the window
+        const window = new Electron.BrowserWindow({
+            width: 1100,
+            height: 720,
+            autoHideMenuBar: true,
+            minWidth: 320,
+            minHeight: 200
+        });
+        window.loadURL(`http://localhost:${port}`);
+        Electron.app.on('window-all-closed', () => {
+            if (process.platform !== 'darwin') Electron.app.quit();
+        });
+    });
+} else {
+    srv.listen(config.port, () => console.log(`Standalone server listening on port ${config.port}`));
+}

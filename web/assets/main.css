@@ -242,14 +242,14 @@ body {
     color: var(--red2);
 }
 
-#connectionManager .entry {
-    gap: 5px 20px;
-}
-#connectionManager .entry > .row > .icon {
+#connectionManager .entry > .icon {
     font-family: 'Material Symbols Outlined Rounded';
     font-size: 32px;
     color: var(--f3);
     user-select: none;
+}
+#connectionManager .entry > .row {
+    gap: 8px 20px;
 }
 
 .moveFilesPicker .folders {
