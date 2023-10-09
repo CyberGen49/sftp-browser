@@ -2290,11 +2290,14 @@ window.addEventListener('load', async() => {
 
 // Dynamically update file list relative dates
 setInterval(() => {
+    if (document.hidden) return;
     const els = $$('.fileEntry[data-date]', elFiles);
     for (const el of els) {
         const timestamp = parseInt(el.dataset.date);
         if (!timestamp) continue;
         const elDateMain = $('.date', el);
-        elDateMain.innerText = getRelativeDate(timestamp);
+        requestAnimationFrame(() => {
+            elDateMain.innerText = getRelativeDate(timestamp);
+        });
     }
-}, 1000*60);
+}, 1000*15);
