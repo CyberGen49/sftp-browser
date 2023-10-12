@@ -62,8 +62,6 @@ let lastSelectedIndex = -1;
 /** True of a directory load is in progress
  * and currently visible files shouldn't be accessed */
 let fileAccessLock = false;
-/** The maximum number of bytes a file can be to still be viewable */
-let maxViewableFileSize = 1024*1024*100;
 
 /**
  * Saves the current state of the `connections` object to LocalStorage.
@@ -608,8 +606,8 @@ const getFileEntryElement = (file, dirPath) => {
         if (fileAccessLock) return;
         // Handle file loading accordingly
         if (file.type !== 'd') {
-            const info = getFileExtInfo(file.name);
-            if (info.isViewable && file.size < maxViewableFileSize) {
+            const info = getFileExtInfo(file.name, file.size);
+            if (info.isViewable) {
                 return openFileViewer(elFile.dataset.path);
             } else {
                 new PopupBuilder()

@@ -291,6 +291,37 @@ body {
     white-space: pre-wrap;
     word-break: break-word;
 }
+#preview .CodeMirror {
+    width: 1200px;
+    height: 100%;
+    background: var(--b0);
+    border: none;
+    border-left: 1px solid var(--b2);
+    border-right: 1px solid var(--b2);
+    color: var(--f1);
+    font-family: 'Cascadia Code';
+    font-size: 18px;
+    line-height: 1.3;
+}
+#preview .CodeMirror-gutters {
+    border: none;
+    background: none;
+}
+#preview .CodeMirror-linenumbers {
+    background: var(--b0);
+    padding: 0px 10px;
+}
+#preview .CodeMirror-linenumber {
+    color: var(--f3);
+}
+#preview .CodeMirror-selected,
+#preview .CodeMirror-selectedtext,
+#preview .CodeMirror *::selection {
+    background: var(--b3);
+}
+#preview .CodeMirror-cursor {
+    border-color: var(--f1);
+}
 #preview.markdown .rendered {
     width: 1200px;
     padding: 20px;

@@ -75,9 +75,20 @@ const updatePreview = async() => {
             }
             case 'markdown':
             case 'text': {
+                elControls.style.display = '';
+                elPreview.innerHTML = '';
                 // Initialize the textarea
-                const textarea = document.createElement('textarea');
-                textarea.value = await (await fetch(fileUrl)).text();
+                const text = await (await fetch(fileUrl)).text();
+                //const textarea = document.createElement('textarea');
+                // Initialize CodeMirror
+                const editor = CodeMirror(elPreview, {
+                    value: text,
+                    lineNumbers: true,
+                    lineWrapping: true,
+                    scrollPastEnd: true,
+                    mode: extInfo.codeMirrorMode
+                });
+                const elEditor = $('.CodeMirror', elPreview);
                 // Add HTML
                 elControls.insertAdjacentHTML('beforeend', `
                     <button class="btn small secondary" disabled>
@@ -112,7 +123,8 @@ const updatePreview = async() => {
                     });
                     const res2 = await api.post('files/create', {
                         path: path
-                    }, textarea.value);
+                    //}, textarea.value);
+                    }, editor.getValue());
                     if (res1.error || res2.error) {
                         console.error(e);
                         btnSaveName.innerText = 'Failed!!';
@@ -121,7 +133,8 @@ const updatePreview = async() => {
                         getUpdatedStats();
                     }
                 });
-                textarea.addEventListener('input', () => {
+                //textarea.addEventListener('input', () => {
+                editor.on('change', () => {
                     btnSave.disabled = false;
                     btnSave.classList.add('info');
                     btnSaveName.innerText = 'Save';
@@ -142,7 +155,8 @@ const updatePreview = async() => {
                 const wrapCheckbox = $('input[type="checkbox"]', elControls);
                 wrapCheckbox.addEventListener('change', () => {
                     const isChecked = wrapCheckbox.checked;
-                    textarea.style.whiteSpace = isChecked ? 'pre-wrap' : 'pre';
+                    //textarea.style.whiteSpace = isChecked ? 'pre-wrap' : 'pre';
+                    editor.setOption('lineWrapping', isChecked);
                     window.localStorage.setItem('wrapTextEditor', isChecked);
                 });
                 wrapCheckbox.checked = window.localStorage.getItem('wrapTextEditor') == 'true';
@@ -160,8 +174,10 @@ const updatePreview = async() => {
                         btnPreview.style.display = 'none';
                         btnEdit.style.display = '';
                         elRendered.style.display = '';
-                        textarea.style.display = 'none';
-                        elRendered.innerHTML = marked.parse(textarea.value);
+                        //textarea.style.display = 'none';
+                        elEditor.style.display = 'none';
+                        //elRendered.innerHTML = marked.parse(textarea.value);
+                        elRendered.innerHTML = marked.parse(editor.getValue());
                         // Make all links open in a new tab
                         const links = $$('a', elRendered);
                         for (const link of links) {
@@ -173,15 +189,13 @@ const updatePreview = async() => {
                         btnPreview.style.display = '';
                         btnEdit.style.display = 'none';
                         elRendered.style.display = 'none';
-                        textarea.style.display = '';
+                        //textarea.style.display = '';
+                        elEditor.style.display = '';
                     });
                     // View file by default
-                    btnPreview.click();
+                    btnEdit.click();
                 }
-                // Show elements
-                elControls.style.display = '';
-                elPreview.innerHTML = '';
-                elPreview.appendChild(textarea);
+                //elPreview.appendChild(textarea);
                 if (extInfo.type == 'markdown')
                     elPreview.appendChild(elRendered);
                 break;

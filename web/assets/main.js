@@ -42,7 +42,7 @@ const downloadUrl = (url, name) => {
     a.click();
 }
 
-const getFileExtInfo = path => {
+const getFileExtInfo = (path, size) => {
     const ext = path.split('.').pop().toLowerCase();
     const types = {
         image: {
@@ -92,13 +92,52 @@ const getFileExtInfo = path => {
             markdown: 'text/markdown'
         }
     };
+    const codeMirrorModes = {
+        html: 'htmlmixed',
+        css: 'css',
+        js: 'javascript',
+        json: 'javascript',
+        py: 'python',
+        php: 'php',
+        java: 'clike',
+        c: 'clike',
+        cpp: 'clike',
+        cs: 'clike',
+        rb: 'ruby',
+        go: 'go',
+        rs: 'rust',
+        swift: 'swift',
+        sh: 'shell',
+        bat: 'shell',
+        ps1: 'shell',
+        sql: 'sql',
+        yaml: 'yaml',
+        yml: 'yaml',
+        ts: 'javascript',
+        properties: 'properties',
+        md: 'gfm',
+        markdown: 'gfm'
+    };
+    const maxSizes = {
+        image: 1024*1024*20,
+        video: 1024*1024*100,
+        audio: 1024*1024*100,
+        text: 1024*1024*5,
+        markdown: 1024*1024*5
+    };
     const data = { isViewable: false, type: null, mime: null }
     for (const type in types) {
         if (types[type][ext]) {
             data.isViewable = true;
             data.type = type;
             data.mime = types[type][ext];
+            data.codeMirrorMode = codeMirrorModes[ext] || null;
             break;
+        }
+    }
+    if (data.isViewable && size) {
+        if (size > maxSizes[data.type]) {
+            data.isViewable = false;
         }
     }
     return data;
