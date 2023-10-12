@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
+    <title>File Viewer</title>
+    <meta name="description" content="Connect to and manage files on your SFTP server with ease!">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#1f2733">
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="icon" href="/icon.png">
+    <link rel="stylesheet" href="https://src.simplecyber.org/v2/themes.css">
+    <link rel="stylesheet" href="https://src.simplecyber.org/v2/base.css">
+    <link rel="stylesheet" href="/assets/main.css">
+    <script defer src="https://src.simplecyber.org/lib/axios.min.js"></script>
+    <script defer src="https://src.simplecyber.org/lib/tabbable.min.js"></script>
+    <script defer src="https://src.simplecyber.org/lib/focus-trap.min.js"></script>
+    <script defer src="https://src.simplecyber.org/lib/dayjs.min.js"></script>
+    <script defer src="https://src.simplecyber.org/lib/marked.min.js"></script>
+    <script defer src="https://src.simplecyber.org/v2/base.js"></script>
+    <script defer src="https://src.simplecyber.org/utils.js"></script>
+    <script defer src="/assets/main.js"></script>
+    <script defer src="/assets/file.js"></script>
+</head>
+<body class="darkmuted">
+    <div id="main" class="col">
+        <div id="navbar" class="row gap-20 align-center flex-no-shrink">
+            <button class="btn secondary iconOnly" onClick="window.close()" title="Close">
+                <div class="icon">close</div>
+            </button>
+            <div id="fileHeader" class="row gap-10 flex-grow align-center">
+                <div class="icon flex-no-shrink">insert_drive_file</div>
+                <div class="col gap-2">
+                    <div class="path"></div>
+                    <div class="name"></div>
+                </div>
+            </div>
+            <button id="download" class="btn iconOnly" title="Download file">
+                <div class="icon">download</div>
+            </button>
+        </div>
+        <div id="controls" class="row gap-10 align-center flex-no-shrink" style="display: none"></div>
+        <div id="preview" class="row flex-grow align-center justify-center">
+            <div class="spinner"></div>
+        </div>
+        <progress id="progressBar" min="0" max="100" value="0"></progress>
+        <div id="statusBar" class="row align-center flex-no-shrink">
+            Loading file...
+        </div>
+    </div>
+</body>
+</html>

@@ -79,27 +79,59 @@ body {
     border-bottom: 1px solid var(--b3);
 }
 
-#dirControls {
+#fileHeader .icon {
+    font-family: 'Material Symbols Filled Rounded';
+    font-size: 28px;
+    color: var(--f3);
+    user-select: none;
+}
+
+#fileHeader .path {
+    font-size: 14px;
+    color: var(--f4);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+#fileHeader .name {
+    font-size: 18px;
+    color: var(--f1);
+    font-weight: bold;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+#controls {
     padding: 8px 16px;
-    border-bottom: 1px solid var(--b3);
+    border: 1px solid var(--b3);
+    border-width: 0px 0px 1px 0px;
     overflow-x: auto;
     overflow-y: hidden;
 }
-#dirControls::-webkit-scrollbar {
+#controls::-webkit-scrollbar {
     height: 3px;
     background: transparent;
 }
-#dirControls::-webkit-scrollbar-thumb {
+#controls::-webkit-scrollbar-thumb {
     background: var(--b4);
 }
-#dirControls::-webkit-scrollbar-thumb:hover {
+#controls::-webkit-scrollbar-thumb:hover {
     background: var(--b5);
 }
-#dirControls .sep {
+#controls .sep {
     width: 1px;
     height: 20px;
     margin: 0px 5px;
     background-color: var(--b3);
+}
+#controls .selectOption {
+    font-size: 14px;
+    color: var(--f2);
+    margin-top: 5px;
+}
+#controls .selectOption input {
+    font-size: 28px;
 }
 
 #fileColHeadings {
@@ -219,6 +251,50 @@ body {
 }
 .fileEntry.cut:not(.selected) {
     opacity: 0.5;
+}
+
+#preview {
+    overflow: auto;
+}
+#preview.image,
+#preview.video {
+    background: black;
+}
+#preview img,
+#preview video {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+}
+#preview.audio {
+    padding: 10px;
+}
+#preview.audio audio {
+    width: 500px;
+}
+#preview.text textarea,
+#preview.markdown textarea {
+    width: 1200px;
+    height: 100%;
+    padding: 15px;
+    background: var(--b0);
+    border: none;
+    border-left: 1px solid var(--b2);
+    border-right: 1px solid var(--b2);
+    color: var(--f1);
+    font-family: 'Cascadia Code';
+    font-size: 18px;
+    line-height: 1.3;
+    resize: none;
+    outline: none;
+    overflow: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+#preview.markdown .rendered {
+    width: 1200px;
+    padding: 20px;
+    margin: auto;
 }
 
 #progressBar {
