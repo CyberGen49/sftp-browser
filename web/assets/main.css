@@ -267,10 +267,6 @@ body {
     justify-content: initial;
     align-items: initial;
     cursor: grab;
-    scrollbar-width: none;
-}
-#preview.image::-webkit-scrollbar {
-    display: none;
 }
 #preview img {
     flex-shrink: 0;

@@ -89,6 +89,7 @@ const updatePreview = async() => {
                     } else {
                         fitPercent = (previewRect.height / image.naturalHeight) * 100;
                     }
+                    fitPercent = Math.min(fitPercent, 100);
                     setZoom(fitPercent);
                     image.style.marginTop = '';
                     image.style.marginLeft = '';
