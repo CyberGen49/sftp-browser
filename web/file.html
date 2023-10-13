@@ -21,6 +21,10 @@
     <script defer src="https://src.simplecyber.org/lib/marked.min.js"></script>
     <script defer src="https://src.simplecyber.org/lib/codemirror5.js"></script>
     <script defer src="https://src.simplecyber.org/lib/codemirror5-scrollPastEnd.js"></script>
+    <script defer src="https://src.simplecyber.org/lib/codemirror5-activeLine.js"></script>
+    <script defer src="https://src.simplecyber.org/lib/codemirror5-loadMode.js"></script>
+    <script defer src="https://src.simplecyber.org/lib/codemirror5-closeBrackets.js"></script>
+    <script defer src="https://src.simplecyber.org/lib/codemirror5-overlay.js"></script>
     <script defer src="https://src.simplecyber.org/v2/base.js"></script>
     <script defer src="https://src.simplecyber.org/utils.js"></script>
     <script defer src="/assets/main.js"></script>
@@ -45,7 +49,7 @@
         </div>
         <div id="controls" class="row gap-10 align-center flex-no-shrink" style="display: none"></div>
         <div id="preview" class="row flex-grow align-center justify-center">
-            <div class="spinner"></div>
+            <div class="spinner" style="margin: auto"></div>
         </div>
         <progress id="progressBar" min="0" max="100" value="0"></progress>
         <div id="statusBar" class="row align-center flex-no-shrink">

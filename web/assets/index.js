@@ -2163,12 +2163,15 @@ window.addEventListener('load', async() => {
 setInterval(() => {
     if (document.hidden) return;
     const els = $$('.fileEntry[data-date]', elFiles);
+    if (els.length > 500) return;
     for (const el of els) {
         const timestamp = parseInt(el.dataset.date);
         if (!timestamp) continue;
         const elDateMain = $('.date', el);
         requestAnimationFrame(() => {
-            elDateMain.innerText = getRelativeDate(timestamp);
+            const newText = getRelativeDate(timestamp);
+            if (elDateMain.innerText == newText) return;
+            elDateMain.innerText = newText;
         });
     }
 }, 1000*15);

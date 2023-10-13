@@ -86,35 +86,66 @@ const getFileExtInfo = (path, size) => {
             yml: 'text/yaml',
             ts: 'text/typescript',
             properties: 'text/x-properties',
+            toml: 'text/x-toml',
+            cfg: 'text/x-properties',
+            conf: 'text/x-properties',
+            ini: 'text/x-properties',
+            log: 'text/x-log'
         },
         markdown: {
             md: 'text/markdown',
             markdown: 'text/markdown'
         }
     };
+    // https://codemirror.net/5/mode/index.html
+    // https://github.com/codemirror/codemirror5/tree/master/mode
+    const getKeywordsObject = keywords => {
+        const obj = {};
+        for (const word of keywords) obj[word] = true;
+        return obj;
+    }
     const codeMirrorModes = {
         html: 'htmlmixed',
         css: 'css',
         js: 'javascript',
-        json: 'javascript',
+        json: {
+            name: 'javascript',
+            json: true
+        },
         py: 'python',
         php: 'php',
-        java: 'clike',
-        c: 'clike',
-        cpp: 'clike',
-        cs: 'clike',
+        java: {
+            name: 'clike',
+            keywords: getKeywordsObject('abstract assert boolean break byte case catch char class const continue default do double else enum exports extends final finally float for goto if implements import instanceof int interface long native new package private protected public return short static strictfp super switch synchronized this throw throws transient try void volatile while'.split(' '))
+        },
+        c: {
+            name: 'clike',
+            keywords: getKeywordsObject('auto break case char const continue default do double else enum extern float for goto if int long register return short signed sizeof static struct switch typedef union unsigned void volatile while'.split(' '))
+        },
+        cpp: {
+            name: 'clike',
+            keywords: getKeywordsObject('asm auto break case catch char class const const_cast continue default delete do double dynamic_cast else enum explicit export extern false float for friend goto if inline int long mutable namespace new operator private protected public register reinterpret_cast return short signed sizeof static static_cast struct switch template this throw true try typedef typeid typename union unsigned using virtual void volatile wchar_t while'.split(' ')),
+            useCPP: true
+        },
+        cs: {
+            name: 'clike',
+            keywords: getKeywordsObject('abstract as base bool break byte case catch char checked class const continue decimal default delegate do double else enum event explicit extern false finally fixed float for foreach goto if implicit in int interface internal is lock long namespace new null object operator out override params private protected public readonly ref return sbyte sealed short sizeof stackalloc static string struct switch this throw true try typeof uint ulong unchecked unsafe ushort using virtual void volatile while'.split(' ')),
+        },
         rb: 'ruby',
         go: 'go',
         rs: 'rust',
         swift: 'swift',
         sh: 'shell',
-        bat: 'shell',
-        ps1: 'shell',
+        ps1: 'powershell',
         sql: 'sql',
         yaml: 'yaml',
         yml: 'yaml',
         ts: 'javascript',
         properties: 'properties',
+        toml: 'toml',
+        cfg: 'properties',
+        conf: 'properties',
+        ini: 'properties',
         md: 'gfm',
         markdown: 'gfm'
     };
