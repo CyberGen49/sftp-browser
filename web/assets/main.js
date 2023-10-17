@@ -150,11 +150,11 @@ const getFileExtInfo = (path, size) => {
         markdown: 'gfm'
     };
     const maxSizes = {
-        image: 1024*1024*20,
-        video: 1024*1024*100,
-        audio: 1024*1024*100,
-        text: 1024*1024*5,
-        markdown: 1024*1024*5
+        image: 1024*1024*16,
+        video: 1024*1024*16,
+        audio: 1024*1024*16,
+        text: 1024*1024*2,
+        markdown: 1024*1024*2
     };
     const data = { isViewable: false, type: null, mime: null }
     for (const type in types) {

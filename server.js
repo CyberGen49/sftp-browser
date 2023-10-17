@@ -316,15 +316,18 @@ const downloadSingleFileHandler = async(connectionOpts, res, remotePath, stats) 
         const session = await getSession(res, connectionOpts);
         if (!session) throw new Error('Failed to create session');
         // Continuously update the session activity
-        setInterval(() => {
+        interval = setInterval(() => {
             const hash = getObjectHash(connectionOpts);
             sessionActivity[hash] = Date.now();
         }, 1000*1);
         // When the response closes, end the session
-        res.on('close', () => {
+        const handleClose = () => {
             clearInterval(interval);
             session.end();
-        });
+        };
+        res.on('end', handleClose);
+        res.on('close', handleClose);
+        res.on('error', handleClose);
         // Set response headers
         res.setHeader('Content-Type', mime.getType(remotePath) || 'application/octet-stream');
         res.setHeader('Content-Disposition', `attachment; filename="${path.basename(remotePath)}"`);
@@ -365,11 +368,14 @@ const downloadMultiFileHandler = async(connectionOpts, res, remotePaths, rootPat
         const archive = archiver('zip');
         archive.pipe(res);
         // When the response closes, end the session
-        res.on('close', () => {
+        const handleClose = () => {
             clearInterval(interval);
             archive.end();
             session.end();
-        });
+        };
+        res.on('end', handleClose);
+        res.on('close', handleClose);
+        res.on('error', handleClose);
         // Add file to the archive
         const addToArchive = async(remotePath) => {
             const archivePath = normalizeRemotePath(remotePath.replace(rootPath, ''));
