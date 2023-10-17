@@ -555,6 +555,8 @@ if (Electron.app) {
             minHeight: 200
         });
         window.loadURL(`http://localhost:${port}`);
+      	// Quit the app when all windows are closed
+      	// unless we're on macOS
         Electron.app.on('window-all-closed', () => {
             if (process.platform !== 'darwin') Electron.app.quit();
         });

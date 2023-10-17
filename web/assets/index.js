@@ -10,6 +10,7 @@ const btnDirMenu = $('#dirMenu');
 const btnDeselectAll = $('#deselectAll');
 const btnUpload = $('#upload');
 const btnDirCreate = $('#dirCreate');
+const btnFileCreate = $('#fileCreate');
 const btnSelectionCut = $('#fileCut');
 const btnSelectionCopy = $('#fileCopy');
 const btnSelectionPaste = $('#filePaste');
@@ -78,8 +79,22 @@ const connectionManagerDialog = () => {
     const el = document.createElement('div');
     el.id = 'connectionManager';
     el.classList = 'col gap-15';
-    for (const id in connections) {
+    const connectionValues = [];
+    for (const id of Object.keys(connections)) {
         const connection = connections[id];
+        connectionValues.push({
+            id: id,
+            ...connection
+        });
+    }
+    connectionValues.sort((a, b) => {
+        const aName = a.name.toLowerCase();
+        const bName = b.name.toLowerCase();
+        if (aName < bName) return -1;
+        if (aName > bName) return 1;
+        return 0;
+    });
+    for (const connection of connectionValues) {
         const entry = document.createElement('div');
         entry.classList = 'entry row gap-10 align-center';
         entry.innerHTML = /*html*/`
@@ -488,6 +503,7 @@ const loadDirectory = async path => {
     updateDirControls();
     btnUpload.disabled = true;
     btnDirCreate.disabled = true;
+    btnFileCreate.disabled = true;
     btnDownload.disabled = true;
     btnShare.disabled = true;
     btnDirSort.disabled = true;
@@ -531,6 +547,7 @@ const loadDirectory = async path => {
     if (!data.error) {
         btnUpload.disabled = false;
         btnDirCreate.disabled = false;
+        btnFileCreate.disabled = false;
         btnDownload.disabled = false;
         btnShare.disabled = false;
         btnDirSort.disabled = false;
@@ -1197,7 +1214,7 @@ const createDirectoryDialog = () => {
  * Opens a dialog prompting the user to rename the file with the specified path.
  * @param {string} path The file path
  */
-const renameFileDialog = async path => {
+const renameFileDialog = async(path, shouldReload = true) => new Promise(resolve => {
     const el = document.createElement('div');
     const currentName = path.split('/').pop();
     el.innerHTML = /*html*/`
@@ -1213,30 +1230,34 @@ const renameFileDialog = async path => {
             .setIsPrimary(true)
             .setLabel('Rename')
             .setClickHandler(async() => {
+                popup.setOnHide(() => {});
                 const name = input.value;
-                if (!name) return;
+                if (!name) return resolve(path);
                 const pathOld = path;
-                const pathNew = pathOld.split('/').slice(0, -1).join('/') + '/' + name;
+                const dir = pathOld.split('/').slice(0, -1).join('/');
+                let pathNew = `${dir}/${name}`;
                 // Check if the new path exists
-                const resExistsCheck = await api.get('files/exists', { path: pathNew });
-                if (resExistsCheck.exists) {
-                    const replaceStatus = await replaceDialog(pathNew);
-                    if (replaceStatus == 'skip' || replaceStatus == 'skipAll')
-                        return setStatus(`Rename cancelled`);
-                    await deleteFile(pathNew);
+                if (await checkFileExists(pathNew)) {
+                    if ((await fileConflictDialog(pathNew, false, true)).type == 'skip') {
+                        setStatus(`Rename cancelled`);
+                        return resolve();
+                    }
+                    pathNew = await getAvailableFileName(dir, name);
                 }
                 const data = await api.put('files/move', {
                     pathOld, pathNew
                 });
                 if (data.error) {
                     setStatus(`Error: ${data.error}`, true);
-                } else {
+                } else if (shouldReload) {
                     const pathNewDir = data.pathNew.split('/').slice(0, -1).join('/');
                     await changePath(pathNewDir);
                     selectFile(data.pathNew, true, false, true);
                 }
+                resolve(data.pathNew || path);
             }))
         .addAction(action => action.setLabel('Cancel'))
+        .setOnHide(() => resolve(path))
         .show();
     input.focus();
     input.select();
@@ -1245,7 +1266,7 @@ const renameFileDialog = async path => {
             $('.btn:first-of-type', popup.el).click();
         }
     });
-}
+});
 
 /**
  * Opens a dialog prompting the user to select a directory with an interactive browser.
@@ -1326,27 +1347,30 @@ const moveFiles = async(newDirPath, filePaths) => {
     // Loop through selected files
     const newPaths = [];
     let i = 0;
-    let replaceStatus = null;
+    let replaceStatus = { type: 'skip', all: false };
     for (const pathOld of filePaths) {
         const name = pathOld.split('/').pop();
-        const pathNew = `${newDirPath}/${name}`;
+        let pathNew = `${newDirPath}/${name}`;
         if (pathOld == pathNew) continue;
         setStatus(`Moving file: ${pathOld}`, false, Math.round((i/filePaths.length)*100));
         i++;
         // Check if the new path exists
         // If it does, prompt the user to replace it
-        const resExistsCheck = await api.get('files/exists', { path: pathNew });
-        if (resExistsCheck.exists) {
-            if (replaceStatus != 'replaceAll') {
-                if (replaceStatus != 'skipAll') {
-                    replaceStatus = await replaceDialog(pathNew);
-                }
-                if (replaceStatus == 'skip' || replaceStatus == 'skipAll') {
-                    setStatus(`File move skipped`);
-                    continue;
-                }
+        if (await checkFileExists(pathNew)) {
+            if (!replaceStatus.all) {
+                replaceStatus = await fileConflictDialog(pathNew, true, true);
             }
-            await deleteFile(pathNew);
+            if (replaceStatus.type == 'skip') {
+                setStatus(`File move skipped`);
+                continue;
+            }
+            if (replaceStatus.type == 'replace') {
+                const resDelete = await deleteFile(pathNew);
+                if (resDelete.error) return;
+            }
+            if (replaceStatus.type == 'rename') {
+                pathNew = await getAvailableFileName(newDirPath, name);
+            }
         }
         const data = await api.put('files/move', {
             pathOld, pathNew
@@ -1376,27 +1400,29 @@ const copyFiles = async(newDirPath, filePaths) => {
     // Loop through selected files
     const newPaths = [];
     let i = 0;
-    let replaceStatus = null;
+    let replaceStatus = { type: 'skip', all: false };
     for (const pathSource of filePaths) {
         const name = pathSource.split('/').pop();
-        const pathDest = `${newDirPath}/${name}`;
-        if (pathSource == pathDest) continue;
+        let pathDest = `${newDirPath}/${name}`;
         setStatus(`Copying file: ${pathSource}`, false, Math.round((i/filePaths.length)*100));
         i++;
         // Check if the new path exists
         // If it does, prompt the user to replace it
-        const resExistsCheck = await api.get('files/exists', { path: pathDest });
-        if (resExistsCheck.exists) {
-            if (replaceStatus != 'replaceAll') {
-                if (replaceStatus != 'skipAll') {
-                    replaceStatus = await replaceDialog(pathDest);
-                }
-                if (replaceStatus == 'skip' || replaceStatus == 'skipAll') {
-                    setStatus(`File copy skipped`);
-                    continue;
-                }
+        if (await checkFileExists(pathDest)) {
+            if (!replaceStatus.all) {
+                replaceStatus = await fileConflictDialog(name, true, true);
             }
-            await deleteFile(pathDest);
+            if (replaceStatus.type == 'skip') {
+                setStatus(`File copy skipped`);
+                continue;
+            }
+            if (replaceStatus.type == 'replace') {
+                const res = await deleteFile(pathDest);
+                if (res.error) return;
+            }
+            if (replaceStatus.type == 'rename') {
+                pathDest = await getAvailableFileName(newDirPath, name);
+            }
         }
         const data = await api.put('files/copy', {
             pathSrc: pathSource, pathDest: pathDest
@@ -1436,28 +1462,61 @@ const moveFilesDialog = async(copy = false) => {
  * @param {string} fileName The file's name or path to display to the user
  * @returns {Promise<'skip'|'skipAll'|'replace'|'replaceAll'>} One of 4 states representing the user's choice: `skip`, `skipAll`, `replace`, `replaceAll`
  */
-const replaceDialog = fileName => new Promise(resolve => {
+const fileConflictDialog = (fileName, allowReplace = true, allowDuplicate = false) => new Promise(resolve => {
     const el = document.createElement('div');
     el.innerHTML = `
-        <p><b>${fileName}</b> already exists. Do you want to replace it?</p>
+        <p><b>${fileName}</b> already exists. What do you want to do?</p>
         <label class="selectOption">
             <input type="checkbox">
             Do this for all remaining conflicts
         </label>
     `;
     const checkbox = $('input', el);
-    new PopupBuilder()
+    const popup = new PopupBuilder()
+        .setClickOutside(false)
         .setTitle(`File exists`)
-        .addBody(el)
-        .addAction(action => action
-            .setIsPrimary(true)
+        .addBody(el);
+    if (allowReplace)
+        popup.addAction(action => action
             .setLabel('Replace')
-            .setClickHandler(() => resolve(checkbox.checked ? 'replaceAll':'replace')))
-        .addAction(action => action
-            .setLabel('Skip')
-            .setClickHandler(() => resolve(checkbox.checked ? 'skipAll':'skip')))
-        .show();
+            .setClickHandler(() => resolve({ type: 'replace', all: checkbox.checked })));
+    if (allowDuplicate)
+        popup.addAction(action => action
+            .setLabel('Rename')
+            .setClickHandler(() => resolve({ type: 'rename', all: checkbox.checked })));
+    popup.addAction(action => action
+        .setLabel('Skip')
+        .setClickHandler(() => resolve({ type: 'skip', all: checkbox.checked })))
+    popup.show();
 });
+
+/**
+ * Checks if a file exists on the server, returns `null` if error.
+ * @param {string} path The file path
+ */
+const checkFileExists = async path => {
+    const res = await api.get('files/exists', { path: path });
+    if (res.error) return null;
+    return res.exists ? true : false;
+}
+
+/**
+ * Appends a number to the end of a file name until it's unique in the specified directory.
+ * @param {string} dir The directory to check within
+ * @param {string} name The initial file name
+ * @returns {Promise<string>} A promise resolving to the new file path
+ */
+const getAvailableFileName = async(dir, name) => {
+    let i = 1;
+    let path = `${dir}/${name}`;
+    const nameWithoutExt = name.split('.').slice(0, -1).join('.');
+    const ext = name.split('.').pop();
+    while (await checkFileExists(path)) {
+        path = `${dir}/${nameWithoutExt}-${i}.${ext}`;
+        i++;
+    }
+    return path;
+}
 
 /**
  * Uploads input files to the active server.
@@ -1471,7 +1530,7 @@ const uploadFiles = async inputFiles => {
         .show();
     isUploading = true;
     let isCancelled = false;
-    let replaceStatus = null;
+    let replaceStatus = { type: 'skip', all: false };
     let dirPath = activeConnection.path;
     // Handle status and progress bar
     let lastStatusSet = 0;
@@ -1494,23 +1553,25 @@ const uploadFiles = async inputFiles => {
     for (const file of inputFiles) {
         if (isCancelled) break;
         setUploadStatus(`Uploading file: ${file.name}`);
-        // Check if the path exists
-        let path = `${dirPath}/${file.name}`;
-        const resExistenceCheck = await api.get('files/exists', { path: path });
-        path = resExistenceCheck.path;
         // If the file exists, prompt the user to replace it
-        if (resExistenceCheck.exists) {
-            if (replaceStatus != 'replaceAll') {
-                if (replaceStatus != 'skipAll') {
-                    replaceStatus = await replaceDialog(path);
-                }
-                if (replaceStatus == 'skip' || replaceStatus == 'skipAll') {
-                    setStatus(`Upload skipped`);
-                    continue;
-                }
+        let fileName = file.name;
+        let path = `${dirPath}/${fileName}`;
+        if (await checkFileExists(path)) {
+            if (!replaceStatus.all) {
+                replaceStatus = await fileConflictDialog(fileName, true, true);
             }
-            const resDelete = await deleteFile(path);
-            if (resDelete.error) return;
+            if (replaceStatus.type == 'skip') {
+                setStatus(`Upload skipped`);
+                continue;
+            }
+            if (replaceStatus.type == 'replace') {
+                const resDelete = await deleteFile(path);
+                if (resDelete.error) return;
+            }
+            if (replaceStatus.type == 'rename') {
+                path = await getAvailableFileName(dirPath, fileName);
+                fileName = path.split('/').pop();
+            }
         }
         // Make a promise to upload the file
         await new Promise(async(resolve, reject) => {
@@ -1578,7 +1639,7 @@ const uploadFiles = async inputFiles => {
                 const bytesUploaded = Math.min((i+1)*bytesPerChunk, fileSize);
                 const bytesPerSecond = totalBytesUploaded / ((Date.now()-startTime)/1000);
                 const percentUploaded = Math.round((bytesUploaded/fileSize)*100);
-                setUploadStatus(`Uploading file: ${file.name} | ${formatSize(bytesUploaded)} of ${formatSize(fileSize)} (${formatSize(bytesPerSecond)}/s)`, percentUploaded);
+                setUploadStatus(`Uploading file: ${fileName} | ${formatSize(bytesUploaded)} of ${formatSize(fileSize)} (${formatSize(bytesPerSecond)}/s)`, percentUploaded);
             }
             isUploadComplete = true;
             ws.close();
@@ -1598,7 +1659,7 @@ const uploadFiles = async inputFiles => {
             const elExisting = $(`.fileEntry[data-path="${path}"]`, elFiles);
             if (elExisting) elExisting.remove();
             const elFile = getFileEntryElement({
-                name: file.name,
+                name: fileName,
                 type: '-',
                 size: file.size,
                 modifyTime: Date.now(),
@@ -1882,6 +1943,19 @@ btnSelectionPaste.addEventListener('click', async() => {
 
 btnSelectionMoveTo.addEventListener('click', () => moveFilesDialog(false));
 btnSelectionCopyTo.addEventListener('click', () => moveFilesDialog(true));
+
+btnFileCreate.addEventListener('click', async() => {
+    let dir = activeConnection.path;
+    let filePath = await getAvailableFileName(dir, 'file.txt');
+    const data = await api.post('files/create', { path: filePath }, '');
+    if (data.error) {
+        return setStatus(`Error: ${data.error}`, true);
+    }
+    filePath = await renameFileDialog(filePath, false);
+    console.log(filePath)
+    await changePath(dir);
+    selectFile(filePath, true, false, true);
+});
 
 btnSelectionDelete.addEventListener('click', async() => {
     const selected = [...getSelectedFiles()];
