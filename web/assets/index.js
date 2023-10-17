@@ -795,6 +795,13 @@ const fileContextMenu = (elDisplay = null) => {
         btnDirCreate.disabled ? item.disable() : item.enable();
         return item;
     });
+    if (isNoneSelected) menu.addItem(item => {
+        item.setIcon($('.icon', btnFileCreate).innerText)
+            .setLabel('New file...')
+            .setClickHandler(() => clickButton(btnFileCreate))
+        btnFileCreate.disabled ? item.disable() : item.enable();
+        return item;
+    });
     if (isNoneSelected) menu.addSeparator();
     if (!btnSelectionCut.disabled) menu.addItem(item => {
         item.setIcon($('.icon', btnSelectionCut).innerText)
