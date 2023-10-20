@@ -18,6 +18,7 @@ const btnRename = $('#fileRename');
 const btnSelectionMoveTo = $('#fileMoveTo');
 const btnSelectionCopyTo = $('#fileCopyTo');
 const btnSelectionDelete = $('#fileDelete');
+const btnSelectionPerms = $('#filePerms');
 const btnDownload = $('#fileDownload');
 const btnShare = $('#fileShare');
 const btnDirSort = $('#dirSort');
@@ -46,7 +47,7 @@ let sortType = window.localStorage.getItem('sortType') || 'name';
 let sortDesc = window.localStorage.getItem('sortDesc');
 sortDesc = (sortDesc == null) ? false : (sortDesc === 'true');
 /** 
- * True of hidden files should be visible
+ * True if hidden files should be visible
  * @type {boolean}
  */
 let showHidden = window.localStorage.getItem('showHidden');
@@ -63,6 +64,15 @@ let lastSelectedIndex = -1;
 /** True of a directory load is in progress
  * and currently visible files shouldn't be accessed */
 let fileAccessLock = false;
+/**
+* True of hidden files should be visible
+* @type {boolean}
+*/
+let showDownloadPopup = window.localStorage.getItem('showDownloadPopup');
+showDownloadPopup = (showDownloadPopup == null) ? true : (showDownloadPopup === 'true');
+// Variables for file name navigation
+let keypressString = '';
+let keypressClearTimeout;
 
 /**
  * Saves the current state of the `connections` object to LocalStorage.
@@ -72,13 +82,9 @@ const saveConnections = () => {
 }
 
 /**
- * Opens a dialog popup to manage stored connection information.
+ * Returns the `connections` object as a sorted array, and each value has an added `id` property.
  */
-const connectionManagerDialog = () => {
-    const popup = new PopupBuilder();
-    const el = document.createElement('div');
-    el.id = 'connectionManager';
-    el.classList = 'col gap-15';
+const getSortedConnectionsArray = () => {
     const connectionValues = [];
     for (const id of Object.keys(connections)) {
         const connection = connections[id];
@@ -94,6 +100,75 @@ const connectionManagerDialog = () => {
         if (aName > bName) return 1;
         return 0;
     });
+    return connectionValues;
+}
+
+/**
+ * Prompts the user to export a connection.
+ * @param {number} id The connection ID
+ */
+const exportConnectionDialog = async (id) => {
+    const connection = connections[id];
+    const exportBody = document.createElement('div');
+    exportBody.classList = 'col gap-10';
+    exportBody.style.maxWidth = '400px';
+    exportBody.innerHTML = /*html*/`
+        <label class="selectOption">
+            <input type="radio" name="exportCredentials" value="exclude" checked>
+            Without credentials
+        </label>
+        <label class="selectOption">
+            <input type="radio" name="exportCredentials" value="include">
+            With private key or password
+        </label>
+        <small style="color: var(--red3)">Only share exports with credentials with people you trust! These credentials grant access to not only your server's files, but oftentimes an interactive terminal (SSH).</small>
+    `;
+    new PopupBuilder()
+        .setTitle(`Export ${connection.name}`)
+        .addBody(exportBody)
+        .addAction(action => action
+            .setLabel('Export')
+            .setIsPrimary(true)
+            .setClickHandler(() => {
+                const includeCredentials = $('input[name="exportCredentials"]:checked', exportBody).value == 'include';
+                const data = {
+                    name: connection.name,
+                    host: connection.host,
+                    port: connection.port,
+                    username: connection.username,
+                    path: connection.path
+                };
+                if (includeCredentials) {
+                    if (connection.key)
+                        data.key = connection.key;
+                    if (connection.password)
+                        data.password = connection.password;
+                }
+                const blob = new Blob([
+                    JSON.stringify(data)
+                ], {
+                    type: 'application/json'
+                });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `${connection.name.replace(/[^a-zA-Z-_\. ]/g, '').trim() || 'connection'}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+            }))
+        .addAction(action => action.setLabel('Cancel'))
+        .show();
+}
+
+/**
+ * Opens a dialog popup to manage stored connection information.
+ */
+const connectionManagerDialog = () => {
+    const popup = new PopupBuilder();
+    const el = document.createElement('div');
+    el.id = 'connectionManager';
+    el.classList = 'col gap-15';
+    const connectionValues = getSortedConnectionsArray();
     for (const connection of connectionValues) {
         const entry = document.createElement('div');
         entry.classList = 'entry row gap-10 align-center';
@@ -124,62 +199,14 @@ const connectionManagerDialog = () => {
                     .setIcon('edit')
                     .setClickHandler(async() => {
                         popup.hide();
-                        await editConnectionDialog(id);
+                        await editConnectionDialog(connection.id);
                         connectionManagerDialog();
                     }))
                 .addItem(option => option
                     .setLabel('Export...')
                     .setIcon('download')
                     .setClickHandler(async() => {
-                        const exportBody = document.createElement('div');
-                        exportBody.classList = 'col gap-10';
-                        exportBody.style.maxWidth = '400px';
-                        exportBody.innerHTML = /*html*/`
-                            <label class="selectOption">
-                                <input type="radio" name="exportCredentials" value="exclude" checked>
-                                Without credentials
-                            </label>
-                            <label class="selectOption">
-                                <input type="radio" name="exportCredentials" value="include">
-                                With private key or password
-                            </label>
-                            <small style="color: var(--red3)">Only share exports with credentials with people you trust! These credentials grant access to not only your server's files, but oftentimes an interactive terminal (SSH).</small>
-                        `;
-                        new PopupBuilder()
-                            .setTitle(`Export ${connection.name}`)
-                            .addBody(exportBody)
-                            .addAction(action => action
-                                .setLabel('Export')
-                                .setIsPrimary(true)
-                                .setClickHandler(() => {
-                                    const includeCredentials = $('input[name="exportCredentials"]:checked', exportBody).value == 'include';
-                                    const data = {
-                                        name: connection.name,
-                                        host: connection.host,
-                                        port: connection.port,
-                                        username: connection.username,
-                                        path: connection.path
-                                    };
-                                    if (includeCredentials) {
-                                        if (connection.key)
-                                            data.key = connection.key;
-                                        if (connection.password)
-                                            data.password = connection.password;
-                                    }
-                                    const blob = new Blob([
-                                        JSON.stringify(data)
-                                    ], {
-                                        type: 'application/json'
-                                    });
-                                    const url = URL.createObjectURL(blob);
-                                    const a = document.createElement('a');
-                                    a.href = url;
-                                    a.download = `${connection.name.replace(/[^a-zA-Z-_\. ]/g, '').trim() || 'connection'}.json`;
-                                    a.click();
-                                    URL.revokeObjectURL(url);
-                                }))
-                            .addAction(action => action.setLabel('Cancel'))
-                            .show();
+                        exportConnectionDialog(connection.id);
                     }))
                 .addSeparator()
                 .addItem(option => option
@@ -187,7 +214,7 @@ const connectionManagerDialog = () => {
                     .setIcon('delete')
                     .setIsDanger(true)
                     .setClickHandler(async() => {
-                        delete connections[id];
+                        delete connections[connection.id];
                         saveConnections();
                         entry.remove();
                     }))
@@ -195,12 +222,12 @@ const connectionManagerDialog = () => {
         });
         $('.btn.connect', entry).addEventListener('click', () => {
             popup.hide();
-            setActiveConnection(id);
+            setActiveConnection(connection.id);
         });
         el.appendChild(entry);
     }
-    const btnsCont = document.createElement('div');
-    btnsCont.classList = 'row gap-10 flex-wrap';
+    const elButtons = document.createElement('div');
+    elButtons.classList = 'row gap-10 flex-wrap';
     const btnAdd = document.createElement('button');
     btnAdd.classList = 'btn success small';
     btnAdd.innerHTML = /*html*/`
@@ -212,7 +239,7 @@ const connectionManagerDialog = () => {
         await addNewConnectionDialog();
         connectionManagerDialog();
     });
-    btnsCont.appendChild(btnAdd);
+    elButtons.appendChild(btnAdd);
     const btnImport = document.createElement('button');
     btnImport.classList = 'btn secondary small';
     btnImport.innerHTML = /*html*/`
@@ -229,12 +256,16 @@ const connectionManagerDialog = () => {
             popup.hide();
             const reader = new FileReader();
             reader.addEventListener('load', async() => {
-                const data = JSON.parse(reader.result);
-                const id = Date.now();
-                connections[id] = data;
-                saveConnections();
-                if (!data.key && !data.password) {
-                    return editConnectionDialog(id);
+                try {
+                    const data = JSON.parse(reader.result);
+                    const id = Date.now();
+                    connections[id] = data;
+                    saveConnections();
+                    if (!data.key && !data.password) {
+                        return editConnectionDialog(id);
+                    }
+                } catch (error) {
+                    console.error(error);
                 }
                 connectionManagerDialog();
             });
@@ -242,8 +273,8 @@ const connectionManagerDialog = () => {
         });
         input.click();
     });
-    btnsCont.appendChild(btnImport);
-    el.appendChild(btnsCont);
+    elButtons.appendChild(btnImport);
+    el.appendChild(elButtons);
     popup
         .setTitle('Connections')
         .addBody(el)
@@ -436,46 +467,59 @@ const setActiveConnection = (id, path) => {
 const changePath = async(path, pushState = true) => {
     loadStartTime = Date.now();
     if (!activeConnection) return;
+    // Lock file selection to prevent double-clicking during load
+    fileAccessLock = true;
     // Use the current path if none is specified
     path = path || activeConnection.path;
-    // Disable nav buttons while statting
+    // Disable nav buttons during load
     btnNavBack.disabled = true;
     btnNavForward.disabled = true;
     btnGo.disabled = true;
-    // Check if the path exists
+    // Stat the path to make sure it exists
     setStatus(`Checking path...`);
-    const dataExist = await api.get('files/exists', { path: path });
+    const dataStats = await api.get('files/stat', { path: path });
     // If there was an error
-    if (dataExist.error) {
-        setStatus(`Error: ${dataExist.error}`, true);
-    // If the path doesn't exist
-    } else if (!dataExist.exists) {
-        setStatus(`Error: Path doesn't exist`, true);
+    if (dataStats.error) {
+        setStatus(`Error: ${dataStats.error}`, true);
     // Otherwise...
     } else {
-        // Update the path bar
-        inputNavPath.value = dataExist.path;
-        // If the path has changed, push the old path to the back history
-        if (pushState && activeConnection.path != path)
-            backPaths.push(activeConnection.path);
-        // Update the stored current path
-        activeConnection.path = dataExist.path;
-        // Update display
-        document.title = `${activeConnection.name} - ${activeConnection.path}`;
-        window.history.replaceState(null, null, `?con=${activeConnectionId}&path=${encodeURIComponent(activeConnection.path)}`);
-        // If the path is a directory, load it
-        if (dataExist.type == 'd') {
-            await loadDirectory(dataExist.path);
-        // If the path is a file, load it
+        // Get extension info
+        const info = getFileExtInfo(dataStats.path.split('/').pop(), dataStats.stats.size);
+        // If the path is a file
+        if (dataStats.stats.isFile) {
+            // If the file is viewable, open the file viewer
+            if (info.isViewable) {
+                openFileViewer(dataStats.path);
+            } else {
+                await downloadFile(dataStats.path);
+            }
+            // Update the path bar
+            inputNavPath.value = activeConnection.path;
+        // If the path is a directory
+        } else if (dataStats.stats.isDirectory) {
+            // Update the path bar
+            inputNavPath.value = dataStats.path;
+            // If the path has changed, push the old path to the back history
+            if (pushState && activeConnection.path != path)
+                backPaths.push(activeConnection.path);
+            // Update the stored current path
+            activeConnection.path = dataStats.path;
+            // Update display
+            document.title = `${activeConnection.name} - ${activeConnection.path}`;
+            window.history.replaceState(null, null, `?con=${activeConnectionId}&path=${encodeURIComponent(activeConnection.path)}`);
+            // Load the directory
+            await loadDirectory(dataStats.path);
+        // Otherwise, show an error
         } else {
-            await downloadFile(dataExist.path);
-            await changePath(`${path}/..`, false);
+            setStatus(`Error: Path is not a file or directory`, true);
         }
     }
     // Re-enable nav buttons accordingly
     btnNavBack.disabled = (backPaths.length == 0);
     btnNavForward.disabled = (forwardPaths.length == 0);
     btnGo.disabled = false;
+    // Unlock file selection
+    fileAccessLock = false;
 }
 
 /**
@@ -543,7 +587,6 @@ const loadDirectory = async path => {
         }, 200);
     });
     // Re-enable directory controls accordingly
-    fileAccessLock = false;
     if (!data.error) {
         btnUpload.disabled = false;
         btnDirCreate.disabled = false;
@@ -569,12 +612,6 @@ const getFileEntryElement = (file, dirPath) => {
     if (file.name != '..' && file.name.substring(0, 1) === '.') {
         elFile.classList.add('hidden');
     }
-    // Add data attributes to the file element
-    elFile.dataset.path = `${dirPath}/${file.name}`;
-    elFile.dataset.type = file.type;
-    elFile.dataset.name = file.name;
-    elFile.dataset.size = file.size;
-    elFile.dataset.date = file.modifyTime;
     // Get icon
     let icon = 'insert_drive_file';
     if (file.type == 'd') icon = 'folder';
@@ -589,21 +626,14 @@ const getFileEntryElement = (file, dirPath) => {
     const dateRelative = file.modifyTime ? getRelativeDate(file.modifyTime) : '-';
     const dateAbsolute = file.modifyTime ? dayjs(file.modifyTime).format('MMM D, YYYY, h:mm A') : null;
     const perms = file.longname.split(' ')[0].replace(/\*/g, '');
-    const permsNum = (() => {
-        let temp;
-        let str = '';
-        const user = perms.substring(1, 4);
-        const group = perms.substring(4, 7);
-        const other = perms.substring(7, 10);
-        for (const perm of [user, group, other]) {
-            temp = 0;
-            if (perm.includes('r')) temp += 1;
-            if (perm.includes('w')) temp += 2;
-            if (perm.includes('x')) temp += 4;
-            str += temp;
-        }
-        return str;
-    })();
+    const permsNum = permsStringToNum(perms);
+    // Add data attributes to the file element
+    elFile.dataset.path = `${dirPath}/${file.name}`;
+    elFile.dataset.type = file.type;
+    elFile.dataset.name = file.name;
+    elFile.dataset.size = file.size;
+    elFile.dataset.date = file.modifyTime;
+    elFile.dataset.perms = perms;
     // Build the HTML
     let lower = [];
     if (dateRelative !== '-') lower.push(dateRelative);
@@ -621,31 +651,8 @@ const getFileEntryElement = (file, dirPath) => {
     // Handle access
     const accessFile = () => {
         if (fileAccessLock) return;
-        // Handle file loading accordingly
-        if (file.type !== 'd') {
-            const info = getFileExtInfo(file.name, file.size);
-            if (info.isViewable) {
-                return openFileViewer(elFile.dataset.path);
-            } else {
-                new PopupBuilder()
-                    .setTitle(`File can't be viewed`)
-                    .addBodyHTML(`<p>This file can't be viewed in your browser because it's too big or of an unsupported format.</p><p>Download the file to open it.</p>`)
-                    .addAction(action => action
-                        .setLabel('Download')
-                        .setIsPrimary(true)
-                        .setClickHandler(() => {
-                            downloadFile(elFile.dataset.path);
-                        }))
-                    .addAction(action => action.setLabel('Cancel'))
-                    .show();
-            }
-        } else {
-            // Lock file selection to prevent double-clicking during load
-            fileAccessLock = true;
-            // Clear forward history and change paths
-            forwardPaths = [];
-            changePath(elFile.dataset.path);
-        }
+        forwardPaths = [];
+        changePath(elFile.dataset.path);
     };
     // Handle clicks
     let lastClick = 0;
@@ -711,6 +718,30 @@ const getFileEntryElement = (file, dirPath) => {
             // Update selection based on ctrl key state
             if (file.name != '..')
                 selectFile(elFile.dataset.path, !e.ctrlKey, true);
+        }
+    });
+    elFile.addEventListener('keypress', e => {
+        if (e.ctrlKey || e.shiftKey || e.altKey) return;
+        clearTimeout(keypressClearTimeout);
+        keypressString += e.key;
+        keypressClearTimeout = setTimeout(() => {
+            keypressString = '';
+        }, 500);
+        // Get all file elements
+        const files = [...$$('#files .fileEntry', elFiles)];
+        // Put all files before this one at the end of the array
+        // This causes the search to wrap around to the beginning
+        const filesWrapped = [
+            ...files.slice(parseInt(elFile.dataset.index)+1),
+            ...files.slice(0, parseInt(elFile.dataset.index)+1)
+        ];
+        // Search through file elements and select the first one
+        // whose data-name starts with the keypress string
+        for (const el of filesWrapped) {
+            if (el.dataset.name.toLowerCase().startsWith(keypressString.toLowerCase())) {
+                selectFile(el.dataset.path, true, false, true);
+                break;
+            }
         }
     });
     // Handle right-clicks
@@ -846,6 +877,12 @@ const fileContextMenu = (elDisplay = null) => {
             .setLabel(`Delete...`)
             .setClickHandler(() => clickButton(btnSelectionDelete))
             .setIsDanger(true)
+        return item;
+    });
+    if (!btnSelectionPerms.disabled) menu.addItem(item => {
+        item.setIcon($('.icon', btnSelectionPerms).innerText)
+            .setLabel(`Edit permissions...`)
+            .setClickHandler(() => clickButton(btnSelectionPerms))
         return item;
     });
     menu.addSeparator();
@@ -998,6 +1035,7 @@ const openFileViewer = path => {
     if (!isStandalone) {
         // Open in new tab
         window.open(url, '_blank');
+        setStatus(`File opened in new tab`);
     } else {
         // Set size
         const viewerWidth = parseInt(window.localStorage.getItem('viewerWidth')) || window.innerWidth;
@@ -1011,6 +1049,7 @@ const openFileViewer = path => {
         };
         // Open window
         window.open(url, path, `width=${coords.w},height=${coords.h},left=${coords.x},top=${coords.y}`);
+        setStatus(`File opened in new window`);
     }
 }
 
@@ -1064,6 +1103,7 @@ const updateDirControls = () => {
     btnSelectionMoveTo.disabled = true;
     btnSelectionCopyTo.disabled = true;
     btnSelectionDelete.disabled = true;
+    btnSelectionPerms.disabled = true;
     btnDeselectAll.style.display = 'none';
     // When no files are selected
     if (selectedFiles.length == 0) {
@@ -1080,6 +1120,7 @@ const updateDirControls = () => {
         btnSelectionMoveTo.disabled = false;
         btnSelectionCopyTo.disabled = false;
         btnSelectionDelete.disabled = false;
+        btnSelectionPerms.disabled = false;
         btnDeselectAll.style.display = '';
     }
     // When there are files in the clipboard
@@ -1243,6 +1284,7 @@ const renameFileDialog = async(path, shouldReload = true) => new Promise(resolve
                 const pathOld = path;
                 const dir = pathOld.split('/').slice(0, -1).join('/');
                 let pathNew = `${dir}/${name}`;
+                if (pathNew == pathOld) return resolve(path);
                 // Check if the new path exists
                 if (await checkFileExists(pathNew)) {
                     if ((await fileConflictDialog(pathNew, false, true)).type == 'skip') {
@@ -1483,6 +1525,10 @@ const fileConflictDialog = (fileName, allowReplace = true, allowDuplicate = fals
         .setClickOutside(false)
         .setTitle(`File exists`)
         .addBody(el);
+    popup.addAction(action => action
+        .setLabel('Skip')
+        .setIsPrimary(true)
+        .setClickHandler(() => resolve({ type: 'skip', all: checkbox.checked })));
     if (allowReplace)
         popup.addAction(action => action
             .setLabel('Replace')
@@ -1491,9 +1537,6 @@ const fileConflictDialog = (fileName, allowReplace = true, allowDuplicate = fals
         popup.addAction(action => action
             .setLabel('Rename')
             .setClickHandler(() => resolve({ type: 'rename', all: checkbox.checked })));
-    popup.addAction(action => action
-        .setLabel('Skip')
-        .setClickHandler(() => resolve({ type: 'skip', all: checkbox.checked })))
     popup.show();
 });
 
@@ -1772,14 +1815,14 @@ const historyContextMenu = (e, btn, paths, menu = new ContextMenuBuilder()) => {
 
 btnConnections.addEventListener('click', () => {
     const menu = new ContextMenuBuilder();
-    for (const id in connections) {
-        const connection = connections[id];
+    const connectionValues = getSortedConnectionsArray();
+    for (const connection of connectionValues) {
         menu.addItem(option => option
             .setLabel(connection.name)
             .setIcon('cloud')
             .setTooltip(`Click to connect to ${connection.name}<br><small>${connection.username}@${connection.host}:${connection.port}<br>${connection.path}</small>`)
             .setClickHandler(() => {
-                setActiveConnection(id);
+                setActiveConnection(connection.id);
             }));
     };
     menu.addSeparator();
@@ -1993,6 +2036,131 @@ btnSelectionDelete.addEventListener('click', async() => {
                 }
                 setStatus(`Deleted ${selected.length} file(s)`);
                 updateDirControls();
+            }))
+        .addAction(action => action.setLabel('Cancel'))
+        .show();
+});
+
+btnSelectionPerms.addEventListener('click', async() => {
+    const selected = [...getSelectedFiles()];
+    // File permissions matrix
+    // Columns are read, write, execute
+    // Rows are owner, group, other
+    let permsMatrix = [
+        [ 0, 0, 0 ],
+        [ 0, 0, 0 ],
+        [ 0, 0, 0 ]
+    ];
+    for (const el of selected) {
+        const perms = el.dataset.perms.padEnd(10, '-').split('');
+        if (perms[1] != '-') permsMatrix[0][0]++;
+        if (perms[2] != '-') permsMatrix[0][1]++;
+        if (perms[3] != '-') permsMatrix[0][2]++;
+        if (perms[4] != '-') permsMatrix[1][0]++;
+        if (perms[5] != '-') permsMatrix[1][1]++;
+        if (perms[6] != '-') permsMatrix[1][2]++;
+        if (perms[7] != '-') permsMatrix[2][0]++;
+        if (perms[8] != '-') permsMatrix[2][1]++;
+        if (perms[9] != '-') permsMatrix[2][2]++;
+    }
+    const elMatrix = document.createElement('div');
+    elMatrix.classList = 'col permsMatrix';
+    elMatrix.innerHTML = /*html*/`
+        <div class="row">
+            <div class="header top left"></div>
+            <div class="header top">Read</div>
+            <div class="header top">Write</div>
+            <div class="header top">Execute</div>
+        </div>
+        <div class="row">
+            <div class="header left">User</div>
+            <div class="cell">
+                <input type="checkbox" data-row="1" data-col="1">
+            </div>
+            <div class="cell">
+                <input type="checkbox" data-row="1" data-col="2">
+            </div>
+            <div class="cell">
+                <input type="checkbox" data-row="1" data-col="3">
+            </div>
+        </div>
+        <div class="row">
+            <div class="header left">Group</div>
+            <div class="cell">
+                <input type="checkbox" data-row="2" data-col="1">
+            </div>
+            <div class="cell">
+                <input type="checkbox" data-row="2" data-col="2">
+            </div>
+            <div class="cell">
+                <input type="checkbox" data-row="2" data-col="3">
+            </div>
+        </div>
+        <div class="row">
+            <div class="header left">Other</div>
+            <div class="cell">
+                <input type="checkbox" data-row="3" data-col="1">
+            </div>
+            <div class="cell">
+                <input type="checkbox" data-row="3" data-col="2">
+            </div>
+            <div class="cell">
+                <input type="checkbox" data-row="3" data-col="3">
+            </div>
+        </div>
+    `;
+    for (let i = 0; i < 3; i++) {
+        for (let ii = 0; ii < 3; ii++) {
+            permsMatrix[i][ii] = Math.round(permsMatrix[i][ii] / selected.length);
+            if (permsMatrix[i][ii] == 1) {
+                $(`input[data-row="${i+1}"][data-col="${ii+1}"]`, elMatrix).checked = true;
+            }
+        }
+    }
+    new PopupBuilder()
+        .setTitle(`Edit file permissions`)
+        .addBody(elMatrix)
+        .addAction(action => action
+            .setIsPrimary(true)
+            .setLabel('Save')
+            .setClickHandler(async() => {
+                // Get permissions number
+                let str = '-';
+                for (let i = 0; i < 3; i++) {
+                    for (let ii = 0; ii < 3; ii++) {
+                        const checkbox = $(`input[data-row="${i+1}"][data-col="${ii+1}"]`, elMatrix);
+                        if (checkbox.checked) {
+                            str += 'rwx'[ii];
+                        } else {
+                            str += '-';
+                        }
+                    }
+                }
+                let perms = permsStringToNum(str);
+                // Set permissions
+                const changedPaths = [];
+                try {
+                    let i = 0;
+                    for (const file of selected) {
+                        setStatus(`Updating permissions for ${file.dataset.path}...`, false, Math.round((i/selected.length)*100));
+                        const res = await api.put('files/chmod', {
+                            path: file.dataset.path,
+                            mode: perms
+                        });
+                        if (res.error) throw new Error(res.error);
+                        changedPaths.push(file.dataset.path);
+                        i++;
+                    }
+                    // Reload directory and select changed files
+                    if (changedPaths.length > 0) {
+                        await changePath();
+                        for (const file of selected) {
+                            selectFile(file.dataset.path, false, false, true);
+                        }
+                    }
+                } catch (error) {
+                    setStatus(`Error: ${error}`, true);
+                }
             }))
         .addAction(action => action.setLabel('Cancel'))
         .show();

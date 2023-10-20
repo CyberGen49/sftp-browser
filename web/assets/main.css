@@ -253,6 +253,35 @@ body {
     opacity: 0.5;
 }
 
+.permsMatrix .header,
+.permsMatrix .cell {
+    width: 70px;
+    height: 40px;
+}
+.permsMatrix .cell {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+}
+.permsMatrix .header {
+    font-size: 14px;
+    color: var(--f3);
+    display: flex;
+}
+.permsMatrix .header.top {
+    height: 20px;
+    text-align: center;
+    justify-content: center;
+    padding-bottom: 3px;
+}
+.permsMatrix .header.left {
+    width: 50px;
+    text-align: right;
+    justify-content: flex-end;
+    align-items: center;
+}
+
 #preview {
     overflow: auto;
 }

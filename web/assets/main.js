@@ -35,6 +35,22 @@ function checkDoElementsOverlap(el1, el2) {
     return overlap;
 }
 
+function permsStringToNum(str) {
+    let temp;
+    let result = '';
+    const user = str.substring(1, 4);
+    const group = str.substring(4, 7);
+    const other = str.substring(7, 10);
+    for (const perm of [user, group, other]) {
+        temp = 0;
+        if (perm.includes('r')) temp += 4;
+        if (perm.includes('w')) temp += 2;
+        if (perm.includes('x')) temp += 1;
+        result += temp;
+    }
+    return result;
+}
+
 const downloadUrl = (url, name) => {
     const a = document.createElement('a');
     a.href = url;
@@ -156,14 +172,21 @@ const getFileExtInfo = (path, size) => {
         text: 1024*1024*2,
         markdown: 1024*1024*2
     };
-    const data = { isViewable: false, type: null, mime: null }
-    for (const type in types) {
-        if (types[type][ext]) {
-            data.isViewable = true;
-            data.type = type;
-            data.mime = types[type][ext];
-            data.codeMirrorMode = codeMirrorModes[ext] || null;
-            break;
+    const data = { isViewable: false, type: null, mime: null };
+    if (!path.match(/\./g)) {
+        data.isViewable = true;
+        data.type = 'text';
+        data.mime = 'application/octet-stream';
+        data.codeMirrorMode = null;
+    } else {
+        for (const type in types) {
+            if (types[type][ext]) {
+                data.isViewable = true;
+                data.type = type;
+                data.mime = types[type][ext];
+                data.codeMirrorMode = codeMirrorModes[ext] || null;
+                break;
+            }
         }
     }
     if (data.isViewable && size) {

@@ -93,11 +93,14 @@ Creates a file and appends the raw request body to it.
 #### `PUT /api/sftp/files/append`
 Appends the raw request body to a file, creating it if it doesn't exist.
 
-#### `DELETE /api/sftp/files/delete`
-Deletes a file.
-
 #### `PUT /api/sftp/files/move`
 Moves a file or directory from one location to another.
 
 #### `PUT /api/sftp/files/copy`
 Copies a file from one location to another. Directories not supported.
+
+#### `PUT /api/sftp/files/chmod`
+Changes a file's permissions. Directories are supported, but with no recursion.
+
+#### `DELETE /api/sftp/files/delete`
+Deletes a file.

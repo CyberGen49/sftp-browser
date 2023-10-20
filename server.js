@@ -289,6 +289,19 @@ srv.put('/api/sftp/files/copy', initApi, async(req, res) => {
         res.sendError(error);
     }
 });
+srv.put('/api/sftp/files/chmod', initApi, async(req, res) => {
+    /** @type {sftp} */
+    const session = req.session;
+    res.data.path = normalizeRemotePath(req.query.path);
+    if (!res.data.path) return res.sendError('Missing path', 400);
+    res.data.mode = req.query.mode;
+    try {
+        await session.chmod(res.data.path, res.data.mode);
+        res.sendData();
+    } catch (error) {
+        res.sendError(error);
+    }
+});
 srv.get('/api/sftp/files/stat', initApi, async(req, res) => {
     /** @type {sftp} */
     const session = req.session;
