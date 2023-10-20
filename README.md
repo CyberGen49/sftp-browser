@@ -61,14 +61,14 @@ Failed responses will always use a 400 or 500 level HTTP status code.
 
 ### Endpoints
 
-#### `GET /api/sftp/directories/list`
+### `GET /api/sftp/directories/list`
 Gets the immediate contents of a directory.
 
-##### Query params
+#### Query params
 * Required string `path`: The target directory path
 * Optional boolean `dirsOnly`: If `true`, only directories will be returned
 
-##### Successful response
+#### Successful response
 * string `path`: The normalized path
 * object[] `list`: An array of file objects
     * string `list[].name`: The name of this file
@@ -84,42 +84,42 @@ Gets the immediate contents of a directory.
         * string `list[].rights.other`: Contains some arrangement of `r`, `w`, and `x`, representing the permissions everyone else has for this file.
     * string `list[].longname`: The raw SFTP output representing this file
 
-#### `POST /api/sftp/directories/create`
+### `POST /api/sftp/directories/create`
 Creates a directory.
 
-##### Query params
+#### Query params
 * Required string `path`: The new directory path
 
-##### Successful response
+#### Successful response
 * string `path`: The normalized path
 
-#### `DELETE /api/sftp/directories/delete`
+### `DELETE /api/sftp/directories/delete`
 Deletes a directory and its contents.
 
-##### Query params
+#### Query params
 * Required string `path`: The path of the directory to delete
 
-##### Successful response
+#### Successful response
 * string `path`: The normalized path
 
-#### `GET /api/sftp/files/exists`
+### `GET /api/sftp/files/exists`
 Checks if a path exists.
 
-##### Query params
+#### Query params
 * Required string `path`: The path to check
 
-##### Successful response
+#### Successful response
 * string `path`: The normalized path
 * boolean `exists`: `true` if the path exists, `false` otherwise
 * string|boolean `type`: If the file exists, this is its [type](https://www.computernetworkingnotes.com/linux-tutorials/different-types-of-files-in-linux.html) character. If it doesn't exist, this is `false`.
 
-#### `GET /api/sftp/files/stat`
+### `GET /api/sftp/files/stat`
 Gets the details about a file or directory.
 
-##### Query params
+#### Query params
 * Required string `path`: The path to stat
 
-##### Successful response
+#### Successful response
 * string `path`: The normalized path
 * object `stats`: The stats for the file
     * number `accessTime`: The time the file was last accessed
@@ -135,100 +135,100 @@ Gets the details about a file or directory.
     * boolean `isSocket`: `true` if the file is a socket, `false` otherwise
     * boolean `isSymbolicLink`: `true` if the file is a symlink, `false` otherwise
 
-#### `GET /api/sftp/files/get/single`
+### `GET /api/sftp/files/get/single`
 Gets raw file data.
 
-##### Query params
+#### Query params
 * Required string `path`: The path of the file
 
-##### Successful response
+#### Successful response
 *The raw file data*
 
-##### Failed response
+#### Failed response
 *An error response in JSON*
 
-#### `GET /api/sftp/files/get/single/url`
+### `GET /api/sftp/files/get/single/url`
 Gets a temporary URL to download a single file without the need for connection headers. These URLs last 24 hours or until the server is restarted.
 
-##### Query params
+#### Query params
 * Required string `path`: The path of the file
 
-##### Successful response
+#### Successful response
 * string `path`: The normalized path
 * string `download_url`: The resulting download URL
 
-#### `GET /api/sftp/files/get/multi`
+### `GET /api/sftp/files/get/multi`
 Gets a temporary URL for downloading a set of files and directories as a zip archive without the need for connection headers.
 
-##### Query params
+#### Query params
 * Required string[] `paths`: A JSON-formatted array of file or directory paths
 
-##### Successful response
+#### Successful response
 * string `path`: The normalized path
 * string `download_url`: The resulting download URL
 
-#### `POST /api/sftp/files/create`
+### `POST /api/sftp/files/create`
 Creates a file and appends the raw request body to it.
 
-##### Query params
+#### Query params
 * Required string `path`: The path of the new file
 
-##### Request body
+#### Request body
 *The raw data to insert into the new file*
 
-##### Successful response
+#### Successful response
 * string `path`: The normalized path
 
-#### `PUT /api/sftp/files/append`
+### `PUT /api/sftp/files/append`
 Appends the raw request body to a file, creating it if it doesn't exist.
 
-##### Query params
+#### Query params
 * Required string `path`: The path of the file
 
-##### Request body
+#### Request body
 *The raw data to append to the file*
 
-##### Successful response
+#### Successful response
 * string `path`: The normalized path
 
-#### `PUT /api/sftp/files/move`
+### `PUT /api/sftp/files/move`
 Moves a file or directory from one location to another.
 
-##### Query params
+#### Query params
 * Required string `pathOld`: The current path
 * Required string `pathNew`: The new path
 
-##### Successful response
+#### Successful response
 * string `pathOld`: The normalized old path
 * string `pathNew`: The normalized new path
 
-#### `PUT /api/sftp/files/copy`
+### `PUT /api/sftp/files/copy`
 Copies a file from one location to another. Directories not supported.
 
-##### Query params
+#### Query params
 * Required string `pathSrc`: The source path
 * Required string `pathDest`: The destination path
 
-##### Successful response
+#### Successful response
 * string `pathSrc`: The normalized source path
 * string `pathDest`: The normalized destination path
 
-#### `PUT /api/sftp/files/chmod`
+### `PUT /api/sftp/files/chmod`
 Changes a file's permissions. Directories are supported, but with no recursion.
 
-##### Query params
+#### Query params
 * Required string `path`: The path of the file
 * Required string `mode`: The new mode to apply, in the form of `xyz`, where `x`, `y`, and `z` are integers from 0 to 7
 
-##### Successful response
+#### Successful response
 * string `path`: The normalized path
 * string `mode`: The mode that was supplied
 
-#### `DELETE /api/sftp/files/delete`
+### `DELETE /api/sftp/files/delete`
 Deletes a file.
 
-##### Query params
+#### Query params
 * Required string `path`: The path of the file
 
-##### Successful response
+#### Successful response
 * string `path`: The normalized path
