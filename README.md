@@ -7,6 +7,26 @@ SFTP Browser is still in development, but you can play with it at [sftpbrowser.c
 
 This line was written using the text file editor built into SFTP Browser!!
 
+## Features
+- Connect to SFTP servers hosted on any platform
+- Import and export server connections
+- Navigate directories with ease
+- Sort files by different attributes
+- Show or hide hidden (dot) files
+- Switch between list and tile views
+- Download multiple files/directories as a single zip file
+- Upload files, create new files, and create directories
+- Rename and delete files
+- Cut/copy/paste files between directories
+- Use "Move to" and "Copy to" dialogs for more contextual organization
+- Edit file permissions
+- View images, videos, and audio files in the browser
+    - File size limitations apply (see [here](https://github.com/CyberGen49/sftp-browser/blob/53ad712089774c7264157d64dc94c6084950812b/web/assets/main.js#L168) - subject to change)
+- Edit text files in the browser and save directly to the server
+    - Syntax highlighting is supported for certain languages
+- Edit Markdown files and see a live preview
+- Full mobile support with a responsive UI
+
 ## API
 
 ### Authentication
