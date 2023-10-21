@@ -102,7 +102,7 @@ Endpoint: `DELETE /api/sftp/directories/delete`
 #### Successful response
 * string `path`: The normalized path
 
-#### Check if a path exists
+### Check if a path exists
 Endpoint: `GET /api/sftp/files/exists`
 
 #### Query params
