@@ -61,8 +61,8 @@ Failed responses will always use a 400 or 500 level HTTP status code.
 
 ### Endpoints
 
-### `GET /api/sftp/directories/list`
-Gets the immediate contents of a directory.
+### List files in a directory
+Endpoint: `GET /api/sftp/directories/list`
 
 #### Query params
 * Required string `path`: The target directory path
@@ -84,8 +84,8 @@ Gets the immediate contents of a directory.
         * string `list[].rights.other`: Contains some arrangement of `r`, `w`, and `x`, representing the permissions everyone else has for this file.
     * string `list[].longname`: The raw SFTP output representing this file
 
-### `POST /api/sftp/directories/create`
-Creates a directory.
+### Create a directory
+Endpoint: `POST /api/sftp/directories/create`
 
 #### Query params
 * Required string `path`: The new directory path
@@ -93,8 +93,8 @@ Creates a directory.
 #### Successful response
 * string `path`: The normalized path
 
-### `DELETE /api/sftp/directories/delete`
-Deletes a directory and its contents.
+### Delete a directory
+Endpoint: `DELETE /api/sftp/directories/delete`
 
 #### Query params
 * Required string `path`: The path of the directory to delete
@@ -102,8 +102,8 @@ Deletes a directory and its contents.
 #### Successful response
 * string `path`: The normalized path
 
-### `GET /api/sftp/files/exists`
-Checks if a path exists.
+#### Check if a path exists
+Endpoint: `GET /api/sftp/files/exists`
 
 #### Query params
 * Required string `path`: The path to check
@@ -113,8 +113,8 @@ Checks if a path exists.
 * boolean `exists`: `true` if the path exists, `false` otherwise
 * string|boolean `type`: If the file exists, this is its [type](https://www.computernetworkingnotes.com/linux-tutorials/different-types-of-files-in-linux.html) character. If it doesn't exist, this is `false`.
 
-### `GET /api/sftp/files/stat`
-Gets the details about a file or directory.
+### Get information about a file
+Endpoint: `GET /api/sftp/files/stat`
 
 #### Query params
 * Required string `path`: The path to stat
@@ -135,8 +135,8 @@ Gets the details about a file or directory.
     * boolean `isSocket`: `true` if the file is a socket, `false` otherwise
     * boolean `isSymbolicLink`: `true` if the file is a symlink, `false` otherwise
 
-### `GET /api/sftp/files/get/single`
-Gets raw file data.
+### Get raw file data
+Endpoint: `GET /api/sftp/files/get/single`
 
 #### Query params
 * Required string `path`: The path of the file
@@ -147,8 +147,10 @@ Gets raw file data.
 #### Failed response
 *An error response in JSON*
 
-### `GET /api/sftp/files/get/single/url`
+### Get file download link
 Gets a temporary URL to download a single file without the need for connection headers. These URLs last 24 hours or until the server is restarted.
+
+Endpoint: `GET /api/sftp/files/get/single/url`
 
 #### Query params
 * Required string `path`: The path of the file
@@ -157,8 +159,10 @@ Gets a temporary URL to download a single file without the need for connection h
 * string `path`: The normalized path
 * string `download_url`: The resulting download URL
 
-### `GET /api/sftp/files/get/multi`
+### Get zipped download link
 Gets a temporary URL for downloading a set of files and directories as a zip archive without the need for connection headers.
+
+Endpoint: `GET /api/sftp/files/get/multi`
 
 #### Query params
 * Required string[] `paths`: A JSON-formatted array of file or directory paths
@@ -167,8 +171,8 @@ Gets a temporary URL for downloading a set of files and directories as a zip arc
 * string `path`: The normalized path
 * string `download_url`: The resulting download URL
 
-### `POST /api/sftp/files/create`
-Creates a file and appends the raw request body to it.
+### Create a file
+Endpoint: `POST /api/sftp/files/create`
 
 #### Query params
 * Required string `path`: The path of the new file
@@ -179,8 +183,8 @@ Creates a file and appends the raw request body to it.
 #### Successful response
 * string `path`: The normalized path
 
-### `PUT /api/sftp/files/append`
-Appends the raw request body to a file, creating it if it doesn't exist.
+### Append data to a file
+Endpoint: `PUT /api/sftp/files/append`
 
 #### Query params
 * Required string `path`: The path of the file
@@ -191,8 +195,8 @@ Appends the raw request body to a file, creating it if it doesn't exist.
 #### Successful response
 * string `path`: The normalized path
 
-### `PUT /api/sftp/files/move`
-Moves a file or directory from one location to another.
+### Move a file
+Endpoint: `PUT /api/sftp/files/move`
 
 #### Query params
 * Required string `pathOld`: The current path
@@ -202,8 +206,10 @@ Moves a file or directory from one location to another.
 * string `pathOld`: The normalized old path
 * string `pathNew`: The normalized new path
 
-### `PUT /api/sftp/files/copy`
-Copies a file from one location to another. Directories not supported.
+### Copy a file
+Directories not supported.
+
+Endpoint: `PUT /api/sftp/files/copy`
 
 #### Query params
 * Required string `pathSrc`: The source path
@@ -213,8 +219,9 @@ Copies a file from one location to another. Directories not supported.
 * string `pathSrc`: The normalized source path
 * string `pathDest`: The normalized destination path
 
-### `PUT /api/sftp/files/chmod`
-Changes a file's permissions. Directories are supported, but with no recursion.
+### Edit a file's permissions
+Edit: `PUT /api/sftp/files/chmod`
+Directories are supported, but with no recursion.
 
 #### Query params
 * Required string `path`: The path of the file
@@ -224,8 +231,8 @@ Changes a file's permissions. Directories are supported, but with no recursion.
 * string `path`: The normalized path
 * string `mode`: The mode that was supplied
 
-### `DELETE /api/sftp/files/delete`
-Deletes a file.
+### Delete a file
+Endpoint: `DELETE /api/sftp/files/delete`
 
 #### Query params
 * Required string `path`: The path of the file
