@@ -26,6 +26,11 @@ const btnDirView = $('#dirView');
 const btnDirSelection = $('#dirSelection');
 const elFileColHeadings = $('#fileColHeadings');
 const elFiles = $('#files');
+const btnSearch = $('#search');
+const elSearchBar = $('#filterBar');
+const inputSearch = $('#inputFilter');
+const btnSearchCancel = $('#filterCancel');
+const btnSearchGo = $('#searchGo');
 const forceTileViewWidth = 720;
 /** An array of paths in the back history */
 let backPaths = [];
@@ -73,6 +78,11 @@ showDownloadPopup = (showDownloadPopup == null) ? true : (showDownloadPopup === 
 // Variables for file name navigation
 let keypressString = '';
 let keypressClearTimeout;
+// Variables for the filter bar
+let filterTimeout;
+let filterDelay = 250;
+let searchWebsocket;
+let isSearching = false;
 
 /**
  * Saves the current state of the `connections` object to LocalStorage.
@@ -551,6 +561,8 @@ const loadDirectory = async path => {
     btnDownload.disabled = true;
     btnShare.disabled = true;
     btnDirSort.disabled = true;
+    elSearchBar.style.display = 'none';
+    try { searchWebsocket.close(); } catch (error) {}
     // Get the directory listing
     setStatus(`Loading directory...`);
     const data = await api.get('directories/list', { path: path });
@@ -599,6 +611,117 @@ const loadDirectory = async path => {
     }
 }
 
+const searchDirectory = async(path, query) => {
+    let startTime = Date.now();
+    isSearching = true;
+    setStatus(`Starting search...`);
+    document.title = `${activeConnection.name} - Searching for "${query}" in ${path}`;
+    // Disable controls
+    btnUpload.disabled = true;
+    btnDirCreate.disabled = true;
+    btnFileCreate.disabled = true;
+    btnDownload.disabled = true;
+    btnShare.disabled = true;
+    // Remove all existing file elements
+    elFiles.innerHTML = `
+        <div class="heading">Folders</div>
+        <div id="filesFolders" class="section folders"></div>
+        <div class="heading">Files</div>
+        <div id="filesFiles" class="section files"></div>
+    `;
+    const elFilesFolders = $('.folders', elFiles);
+    const elFilesFiles = $('.files', elFiles);
+    lastSelectedIndex = -1;
+    // Get socket key
+    const resSocketKey = await api.get('key');
+    const key = resSocketKey.key;
+    // Connect to the search websocket
+    try { searchWebsocket.close(); } catch (error) {}
+    searchWebsocket = new WebSocket(`wss://${window.location.host}/api/sftp/directories/search?key=${key}&path=${encodeURIComponent(path)}&query=${encodeURIComponent(query)}`);
+    let count = 0;
+    let maxCount = 500;
+    let finishedSuccessfully = false;
+    searchWebsocket.addEventListener('message', e => {
+        const data = JSON.parse(e.data);
+        if (data.error) {
+            setStatus(`Error: ${data.error}`, true, -1);
+        }
+        if (data.status == 'scanning') {
+            setStatus(`Searching within ${data.path}...`, false, -1);
+        }
+        if (data.status == 'complete') {
+            finishedSuccessfully = true;
+            searchWebsocket.close();
+        }
+        if (data.status == 'list') {
+            // Add file elements to the file list
+            for (const file of data.list) {
+                const pathSplit = file.path.split('/');
+                pathSplit.pop();
+                const folderPath = pathSplit.join('/');
+                const elFile = getFileEntryElement(file, path);
+                elFile.classList.add('search');
+                const elNameCont = $('.nameCont', elFile);
+                elNameCont.insertAdjacentHTML('afterbegin', `
+                    <div class="lower path" style="display: block">
+                        <span title="${folderPath}">${folderPath}</span>
+                    </div>
+                `);
+                if (file.type == 'd')
+                    elFilesFolders.appendChild(elFile);
+                else
+                    elFilesFiles.appendChild(elFile);
+                count++;
+                if (count >= maxCount) {
+                    finishedSuccessfully = true;
+                    searchWebsocket.close();
+                }
+            }
+            // Sort file list
+            sortFiles();
+        }
+    });
+    searchWebsocket.addEventListener('close', () => {
+        setStatus(`Found ${count >= maxCount ? `${maxCount}+` : count} file(s) in ${Date.now()-startTime}ms`);
+    });
+}
+
+const searchBarShow = () => {
+    elSearchBar.style.display = '';
+    inputSearch.focus();
+    inputSearch.select();
+}
+
+const searchBarHide = () => {
+    elSearchBar.style.display = 'none';
+    inputSearch.value = '';
+}
+
+const filterFiles = filter => {
+    filter = filter.toLowerCase();
+    clearTimeout(filterTimeout);
+    setStatus(`Filtering files in this folder...`, false, -1);
+    filterTimeout = setTimeout(() => {
+        const files = $$('.fileEntry', elFiles);
+        let shownFiles = 0;
+        let hiddenFiles = 0;
+        for (const el of files) {
+            const matches = el.dataset.name.toLowerCase().includes(filter);
+            if (matches || el.dataset.name == '..') {
+                el.style.display = '';
+                shownFiles++;
+            } else {
+                el.style.display = 'none';
+                hiddenFiles++;
+            }
+        }
+        if (hiddenFiles > 0)
+            setStatus(`Filter matched ${shownFiles} file(s)`);
+        else
+            setStatus(`Filter cleared`);
+    }, filterDelay);
+}
+
 /**
  * Generates a file list entry element with the data for a given file.
  * @param {object} file A file object returned from the directory list API
@@ -628,7 +751,7 @@ const getFileEntryElement = (file, dirPath) => {
     const perms = file.longname.split(' ')[0].replace(/\*/g, '');
     const permsNum = permsStringToNum(perms);
     // Add data attributes to the file element
-    elFile.dataset.path = `${dirPath}/${file.name}`;
+    elFile.dataset.path = file.path || `${dirPath}/${file.name}`;
     elFile.dataset.type = file.type;
     elFile.dataset.name = file.name;
     elFile.dataset.size = file.size;
@@ -940,6 +1063,7 @@ const fileContextMenu = (elDisplay = null) => {
  * Sorts the current file list using `sortType` and `sortDesc`.
  */
 const sortFiles = () => {
+    deselectAllFiles();
     // Define sorting functions
     const sortFuncs = {
         name: (a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }),
@@ -2314,6 +2438,26 @@ elFiles.addEventListener('contextmenu', e => {
     fileContextMenu();
 });
 
+btnSearch.addEventListener('click', searchBarShow);
+
+inputSearch.addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+        btnSearchGo.click();
+    }
+});
+
+btnSearchGo.addEventListener('click', () => {
+    const value = inputSearch.value.trim();
+    if (value)
+        searchDirectory(activeConnection.path, inputSearch.value);
+});
+
+btnSearchCancel.addEventListener('click', () => {
+    searchBarHide();
+    if (isSearching)
+        changePath(activeConnection.path);
+});
+
 window.addEventListener('click', e => {
     const matchIds = [ 'controls', 'files', 'filesFiles', 'filesFolders', 'fileColHeadings', 'statusBar' ];
     if (!matchIds.includes(e.target.id)) return;
@@ -2324,7 +2468,9 @@ window.addEventListener('click', e => {
 });
 
 window.addEventListener('keydown', e => {
-    if (document.activeElement.tagName == 'INPUT') return;
+    const elActive = document.activeElement;
+    const isCtrlF = (e.ctrlKey && e.code == 'KeyF');
+    if (elActive.tagName == 'INPUT' && !isCtrlF) return;
     let func = (() => {
         if (e.ctrlKey) {
             if (e.shiftKey) {
@@ -2336,9 +2482,8 @@ window.addEventListener('keydown', e => {
             }
             if (e.altKey) {
                 // Ctrl + Alt
-                if (e.code === 'KeyA') {
+                if (e.code === 'KeyA')
                     return () => invertFileSelection();
-                }
             }
             // Ctrl
             if (e.code === 'KeyX')
@@ -2351,6 +2496,8 @@ window.addEventListener('keydown', e => {
                 return () => selectAllFiles();
             if (e.code === 'KeyR')
                 return () => btnGo.click();
+            if (e.code === 'KeyF')
+                return () => searchBarShow();
         }
         // Shift
         if (e.shiftKey) {
@@ -2412,7 +2559,7 @@ window.addEventListener('load', async() => {
 setInterval(() => {
     if (document.hidden) return;
     const els = $$('.fileEntry[data-date]', elFiles);
-    if (els.length > 500) return;
+    if (els.length > 1000) return;
     for (const el of els) {
         const timestamp = parseInt(el.dataset.date);
         if (!timestamp) continue;
@@ -2423,4 +2570,4 @@ setInterval(() => {
             elDateMain.innerText = newText;
         });
     }
-}, 1000*15);
+}, 1000*60);

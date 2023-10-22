@@ -177,8 +177,9 @@ body {
     grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
 }
 .fileEntry {
+    height: auto;
+    padding: 6px 20px 5px 20px;
     justify-content: flex-start;
-    height: 34px;
     --bg: transparent;
     --fg: var(--f2);
     --bgHover: var(--b2);
@@ -187,9 +188,17 @@ body {
     text-align: left;
     gap: 10px;
 }
+.fileEntry.search {
+    padding-top: 9px;
+    padding-bottom: 7px;
+}
+.fileEntry.search .nameCont .path {
+    margin-bottom: -2px;
+}
 #files.tiles .fileEntry {
     height: auto;
-    padding: 11px 20px 9px 20px;
+    padding-top: 11px;
+    padding-bottom: 9px;
     gap: 12px;
 }
 #files:not(.showHidden) .fileEntry.hidden {
@@ -251,6 +260,14 @@ body {
 }
 .fileEntry.cut:not(.selected) {
     opacity: 0.5;
+}
+
+#filterBar {
+    padding: 5px;
+}
+#inputFilter {
+    height: 34px;
+    font-size: 15px;
 }
 
 .permsMatrix .header,

@@ -50,85 +50,97 @@
                 </div>
             </div>
         </div>
-        <div class="row flex-grow">
-            <div class="col flex-grow">
-                <div id="controls" class="row gap-10 align-center flex-no-shrink">
-                    <div class="row gap-10 align-center flex-no-shrink atLeast800px">
-                        <button id="upload" class="btn small iconOnly secondary" title="Upload files...<br><small>Shift + U</small>" disabled>
-                            <div class="icon">upload</div>
-                        </button>
-                        <button id="dirCreate" class="btn small iconOnly secondary" title="New folder...<br><small>Shift + N</small>" disabled>
-                            <div class="icon">create_new_folder</div>
-                        </button>
-                        <button id="fileCreate" class="btn small iconOnly secondary" title="New file..." disabled>
-                            <div class="icon">post_add</div>
-                        </button>
-                        <div class="sep"></div>
-                        <button id="fileCut" class="btn small iconOnly secondary" title="Cut<br><small>Ctrl + X</small>" disabled>
-                            <div class="icon">cut</div>
-                        </button>
-                        <button id="fileCopy" class="btn small iconOnly secondary" title="Copy<br><small>Ctrl + C</small>" disabled>
-                            <div class="icon">file_copy</div>
-                        </button>
-                        <button id="filePaste" class="btn small iconOnly secondary" title="Paste<br><small>Ctrl + V</small>" disabled>
-                            <div class="icon">content_paste</div>
-                        </button>
-                        <div class="sep"></div>
-                        <button id="fileRename" class="btn small iconOnly secondary" title="Rename...<br><small>F2</small>" disabled>
-                            <div class="icon">edit_note</div>
-                        </button>
-                        <button id="fileMoveTo" class="btn small iconOnly secondary" title="Move to...<br><small>Shift + M</small>" disabled>
-                            <div class="icon">drive_file_move</div>
-                        </button>
-                        <button id="fileCopyTo" class="btn small iconOnly secondary" title="Copy to...<br><small>Shift + C</small>" disabled>
-                            <div class="icon">move_group</div>
-                        </button>
-                        <button id="fileDelete" class="btn small iconOnly secondary" title="Delete...<br><small>Del</small>" disabled>
-                            <div class="icon" style="color: var(--red2)">delete</div>
-                        </button>
-                        <button id="filePerms" class="btn small iconOnly secondary" title="Edit permissions..." disabled>
-                            <div class="icon">admin_panel_settings</div>
-                        </button>
-                        <div class="sep"></div>
-                        <button id="fileDownload" class="btn small iconOnly secondary" title="Download<br><small>Shift + D</small>" disabled>
-                            <div class="icon">download</div>
-                        </button>
-                        <button id="fileShare" class="btn small iconOnly secondary" title="Copy download link..." disabled>
-                            <div class="icon">share</div>
-                        </button>
-                    </div>
-                    <button id="dirMenu" class="btn small secondary atMost800px" title="File...">
-                        File
-                        <div class="icon" style="margin-top: 1px">expand_more</div>
+        <div class="col flex-grow">
+            <div id="controls" class="row gap-10 align-center flex-no-shrink">
+                <div class="row gap-10 align-center flex-no-shrink atLeast800px">
+                    <button id="upload" class="btn small iconOnly secondary" title="Upload files...<br><small>Shift + U</small>" disabled>
+                        <div class="icon">upload</div>
                     </button>
-                    <button id="deselectAll" class="btn small iconOnly secondary atMost800px" title="Deselect all" style="display: none">
-                        <div class="icon">close</div>
+                    <button id="dirCreate" class="btn small iconOnly secondary" title="New folder...<br><small>Shift + N</small>" disabled>
+                        <div class="icon">create_new_folder</div>
+                    </button>
+                    <button id="fileCreate" class="btn small iconOnly secondary" title="New file..." disabled>
+                        <div class="icon">post_add</div>
                     </button>
                     <div class="sep"></div>
-                    <button id="dirView" class="btn small secondary" title="View...">
-                        <div class="icon">visibility</div>
-                        <div class="icon" style="margin-top: 1px">expand_more</div>
+                    <button id="fileCut" class="btn small iconOnly secondary" title="Cut<br><small>Ctrl + X</small>" disabled>
+                        <div class="icon">cut</div>
                     </button>
-                    <button id="dirSort" class="btn small secondary" title="Sort..." disabled>
-                        <div class="icon">sort</div>
-                        <div class="icon" style="margin-top: 1px">expand_more</div>
+                    <button id="fileCopy" class="btn small iconOnly secondary" title="Copy<br><small>Ctrl + C</small>" disabled>
+                        <div class="icon">file_copy</div>
                     </button>
-                    <button id="dirSelection" class="btn small secondary atLeast800px" title="Selection...">
+                    <button id="filePaste" class="btn small iconOnly secondary" title="Paste<br><small>Ctrl + V</small>" disabled>
+                        <div class="icon">content_paste</div>
+                    </button>
+                    <div class="sep"></div>
+                    <button id="fileRename" class="btn small iconOnly secondary" title="Rename...<br><small>F2</small>" disabled>
+                        <div class="icon">edit_note</div>
+                    </button>
+                    <button id="fileMoveTo" class="btn small iconOnly secondary" title="Move to...<br><small>Shift + M</small>" disabled>
+                        <div class="icon">drive_file_move</div>
+                    </button>
+                    <button id="fileCopyTo" class="btn small iconOnly secondary" title="Copy to...<br><small>Shift + C</small>" disabled>
+                        <div class="icon">move_group</div>
+                    </button>
+                    <button id="fileDelete" class="btn small iconOnly secondary" title="Delete...<br><small>Del</small>" disabled>
+                        <div class="icon" style="color: var(--red2)">delete</div>
+                    </button>
+                    <button id="filePerms" class="btn small iconOnly secondary" title="Edit permissions..." disabled>
+                        <div class="icon">admin_panel_settings</div>
+                    </button>
+                    <div class="sep"></div>
+                    <button id="fileDownload" class="btn small iconOnly secondary" title="Download<br><small>Shift + D</small>" disabled>
+                        <div class="icon">download</div>
+                    </button>
+                    <button id="fileShare" class="btn small iconOnly secondary" title="Copy download link..." disabled>
+                        <div class="icon">share</div>
+                    </button>
+                </div>
+                <button id="dirMenu" class="btn small secondary atMost800px" title="File...">
+                    File
+                    <div class="icon" style="margin-top: 1px">expand_more</div>
+                </button>
+                <button id="deselectAll" class="btn small iconOnly secondary atMost800px" title="Deselect all" style="display: none">
+                    <div class="icon">close</div>
+                </button>
+                <div class="sep"></div>
+                <button id="dirView" class="btn small secondary" title="View...">
+                    <div class="icon">visibility</div>
+                    <div class="icon" style="margin-top: 1px">expand_more</div>
+                </button>
+                <button id="dirSort" class="btn small secondary" title="Sort..." disabled>
+                    <div class="icon">sort</div>
+                    <div class="icon" style="margin-top: 1px">expand_more</div>
+                </button>
+                <div class="row gap-10 align-center flex-no-shrink atLeast800px">
+                    <button id="dirSelection" class="btn small secondary" title="Selection...">
                         <div class="icon" style="margin-top: 0px">select</div>
                         <div class="icon" style="margin-top: 1px">expand_more</div>
                     </button>
                 </div>
-                <div id="fileColHeadings" class="row gap-10">
-                    <div class="name flex-grow">Name</div>
-                    <div class="date">Modified</div>
-                    <div class="size">Size</div>
-                    <div class="perms">Permissions</div>
-                </div>
-                <div id="files" class="col flex-grow gap-2"></div>
-                <progress id="progressBar" min="0" max="100" value="0"></progress>
-                <div id="statusBar" class="row align-center flex-no-shrink">
-                    Waiting for connection...
-                </div>
+                <button id="search" class="btn small iconOnly secondary" title="Search this directory">
+                    <div class="icon">search</div>
+                </button>
+            </div>
+            <div id="filterBar" class="row gap-10" style="display: none">
+                <button id="filterCancel" class="btn tertiary small iconOnly">
+                    <div class="icon">close</div>
+                </button>
+                <input type="text" id="inputFilter" class="textbox" placeholder="Search within this folder...">
+                <button id="searchGo" class="btn small iconOnly" title="Search">
+                    <div class="icon">search</div>
+                </button>
+            </div>
+            <div id="fileColHeadings" class="row gap-10">
+                <div class="name flex-grow">Name</div>
+                <div class="date">Modified</div>
+                <div class="size">Size</div>
+                <div class="perms">Permissions</div>
+            </div>
+            <div id="files" class="col flex-grow gap-2"></div>
+            <progress id="progressBar" min="0" max="100" value="0"></progress>
+            <div id="statusBar" class="row align-center flex-no-shrink">
+                Waiting for connection...
             </div>
         </div>
     </div>

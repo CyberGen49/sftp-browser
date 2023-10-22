@@ -285,7 +285,10 @@ const setStatus = (html, isError = false, progress = null) => {
     elProgressBar.classList.remove('visible');
     if (progress !== null) {
         elProgressBar.classList.add('visible');
-        elProgressBar.value = progress;
+        if (progress >= 0 && progress <= 100)
+            elProgressBar.value = progress;
+        else
+            elProgressBar.removeAttribute('value');
     }
     return !isError;
 }

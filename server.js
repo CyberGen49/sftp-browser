@@ -102,6 +102,12 @@ const initApi = asyncHandler(async(req, res, next) => {
     if (!req.session) return;
     next();
 });
+const keyedRequests = {};
+srv.get('/api/sftp/key', initApi, async(req, res) => {
+    res.data.key = utils.randomHex(32);
+    keyedRequests[res.data.key] = req;
+    res.sendData();
+});
 srv.get('/api/sftp/directories/list', initApi, async(req, res) => {
     /** @type {sftp} */
     const session = req.session;
@@ -117,6 +123,124 @@ srv.get('/api/sftp/directories/list', initApi, async(req, res) => {
     } catch (error) {
         res.sendError(error);
     }
+});
+srv.ws('/api/sftp/directories/search', async(ws, wsReq) => {
+    if (!wsReq.query.key) return ws.close();
+    const req = keyedRequests[wsReq.query.key];
+    if (!req) return ws.close();
+    // Add uniqueness to the connection opts
+    // This forces a new connection to be created
+    req.connectionOpts.ts = Date.now();
+    // Create the session and throw an error if it fails
+    /** @type {sftp} */
+    const session = await getSession(null, req.connectionOpts);
+    const sessionHash = getObjectHash(req.connectionOpts);
+    if (!session) {
+        ws.send(JSON.stringify({
+            success: false,
+            error: 'Failed to create session!'
+        }));
+        return ws.close();
+    }
+    // Normalize the file path or throw an error if it's missing
+    const filePath = normalizeRemotePath(wsReq.query.path);
+    if (!filePath) {
+        ws.send(JSON.stringify({
+            success: false,
+            error: 'Missing path'
+        }));
+        return ws.close();
+    }
+    // Get the query
+    const query = wsReq.query.query;
+    if (!query) {
+        ws.send(JSON.stringify({
+            success: false,
+            error: 'Missing query'
+        }));
+        return ws.close();
+    }
+    // Update the session activity periodically
+    let interval;
+    const updateActivity = () => {
+        sessionActivity[sessionHash] = Date.now();
+    };
+    interval = setInterval(updateActivity, 1000*1);
+    // Handle websocket closure
+    let isClosed = false;
+    ws.on('close', () => {
+        console.log(`Directory search websocket closed`);
+        session.end();
+        clearInterval(interval);
+        delete sessionActivity[sessionHash];
+        isClosed = true;
+    });
+    // Listen for messages
+    console.log(`Websocket opened to search directory ${req.connectionOpts.username}@${req.connectionOpts.host}:${req.connectionOpts.port} ${filePath}`);
+    // Function to get a directory listing
+    const scanDir = async(dirPath) => {
+        try {
+            const list = await session.list(dirPath);
+            return [...list].sort((a, b) => {
+                // Sort by name
+                if (a.name < b.name) return -1;
+                if (a.name > b.name) return 1;
+                return 0;
+            });
+        } catch (error) {
+            return null;
+        }
+    };
+    // Function to send a list when there are enough files
+    let matchedFiles = [];
+    let lastSend = 0;
+    const sendList = () => {
+        if (matchedFiles.length > 0) {
+            ws.send(JSON.stringify({
+                success: true,
+                status: 'list',
+                list: matchedFiles
+            }));
+            matchedFiles = [];
+            lastSend = Date.now();
+        }
+    };
+    // Function to recursively search a directory
+    const recurse = async dirPath => {
+        if (isClosed) return;
+        ws.send(JSON.stringify({
+            success: true,
+            status: 'scanning',
+            path: dirPath
+        }));
+        const list = await scanDir(dirPath);
+        if (!list) {
+            ws.send(JSON.stringify({
+                success: false,
+                error: `Failed to scan directory ${dirPath}`
+            }));
+            return;
+        }
+        for (const file of list) {
+            if (isClosed) return;
+            file.path = `${dirPath}/${file.name}`;
+            if (file.name.toLowerCase().includes(query.toLowerCase())) {
+                matchedFiles.push(file);
+            }
+            if ((Date.now()-lastSend) > 1000) sendList();
+            if (file.type == 'd') {
+                await recurse(file.path);
+            }
+        }
+    };
+    // Start the search
+    await recurse(filePath);
+    if (isClosed) return;
+    sendList();
+    // Send a complete message
+    ws.send(JSON.stringify({ success: true, status: 'complete' }));
+    // Close the websocket
+    ws.close();
 });
 srv.post('/api/sftp/directories/create', initApi, async(req, res) => {
     /** @type {sftp} */
@@ -179,12 +303,6 @@ srv.put('/api/sftp/files/append', initApi, rawBodyParser, async(req, res) => {
     } catch (error) {
         res.sendError(error);
     }
-});
-const keyedRequests = {};
-srv.get('/api/sftp/key', initApi, async(req, res) => {
-    res.data.key = utils.randomHex(32);
-    keyedRequests[res.data.key] = req;
-    res.sendData();
 });
 srv.ws('/api/sftp/files/append', async(ws, wsReq) => {
     if (!wsReq.query.key) return ws.close();
