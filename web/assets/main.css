@@ -262,14 +262,6 @@ body {
     opacity: 0.5;
 }
 
-#filterBar {
-    padding: 5px;
-}
-#inputFilter {
-    height: 34px;
-    font-size: 15px;
-}
-
 .permsMatrix .header,
 .permsMatrix .cell {
     width: 70px;
@@ -398,6 +390,17 @@ body {
 }
 @media (min-width: 801px) {
     .atMost800px {
+        display: none;
+    }
+}
+/* 1000px */
+@media (max-width: 1000px) {
+    .atLeast1000px {
+        display: none;
+    }
+}
+@media (min-width: 1001px) {
+    .atMost1000px {
         display: none;
     }
 }

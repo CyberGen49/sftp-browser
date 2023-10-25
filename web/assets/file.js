@@ -299,9 +299,10 @@ const updatePreview = async() => {
                 btnSaveText.innerText = 'Saving...';
                 btnSave.disabled = true;
                 btnSave.classList.remove('info');
-                const res1 = await api.delete('files/delete', {
-                    path: path
-                });
+                // const res1 = await api.delete('files/delete', {
+                //     path: path
+                // });
+                const res1 = {};
                 const res2 = await api.post('files/create', {
                     path: path
                 //}, textarea.value);

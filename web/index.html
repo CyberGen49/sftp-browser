@@ -29,26 +29,33 @@
                 <div class="icon">public</div>
                 <div class="icon" style="margin-top: 1px">expand_more</div>
             </button>
-            <div class="row gap-10 flex-grow">
+            <div id="inputPathCont" class="atLeast640px row gap-10 flex-grow">
                 <button id="navBack" class="btn iconOnly tertiary" title="Back<br><small>Alt + ArrowLeft</small>" disabled>
                     <div class="icon">arrow_back</div>
                 </button>
                 <button id="navForward" class="btn iconOnly tertiary" title="Forward<br><small>Alt + ArrowRight</small>" disabled>
                     <div class="icon">arrow_forward</div>
                 </button>
-                <div class="row gap-10 justify-end flex-grow">
-                    <div class="flex-grow atLeast640px">
-                        <input type="text" id="inputNavPath" class="textbox" placeholder="Enter a path...">
-                    </div>
-                    <button id="pathGo" class="btn iconOnly secondary atLeast640px" title="Go/Reload<br><small>Ctrl + R</small>">
-                        <div class="icon">refresh</div>
-                    </button>
-                    <button id="pathPopup" class="btn secondary atMost640px" title="Go to folder...">
-                        <div class="icon">folder_open</div>
-                        <div class="icon" style="margin-top: 0px">expand_more</div>
+                <input type="text" id="inputNavPath" class="textbox" placeholder="Enter a path...">
+                <button id="pathGo" class="btn iconOnly secondary" title="Go/Reload<br><small>Ctrl + R</small>">
+                    <div class="icon">refresh</div>
+                </button>
+            </div>
+            <div id="inputSearchCont" class="atLeast1000px row gap-10" style="width: 320px">
+                <div class="row align-center flex-grow">
+                    <input type="text" id="inputNavSearch" class="textbox" placeholder="Search within folder..." style="padding-right: calc(3px + 34px + 3px)">
+                    <button id="navSearchCancel" class="btn small tertiary iconOnly" style="margin-left: calc(-34px - 3px)">
+                        <div class="icon">close</div>
                     </button>
                 </div>
+                <button id="navSearchGo" class="btn iconOnly" title="Search">
+                    <div class="icon">search</div>
+                </button>
             </div>
+            <button id="pathPopup" class="btn secondary atMost640px" title="Go to folder...">
+                <div class="icon">folder_open</div>
+                <div class="icon" style="margin-top: 0px">expand_more</div>
+            </button>
         </div>
         <div class="col flex-grow">
             <div id="controls" class="row gap-10 align-center flex-no-shrink">
@@ -118,18 +125,6 @@
                         <div class="icon" style="margin-top: 1px">expand_more</div>
                     </button>
                 </div>
-                <button id="search" class="btn small iconOnly secondary" title="Search this directory">
-                    <div class="icon">search</div>
-                </button>
-            </div>
-            <div id="filterBar" class="row gap-10" style="display: none">
-                <button id="filterCancel" class="btn tertiary small iconOnly">
-                    <div class="icon">close</div>
-                </button>
-                <input type="text" id="inputFilter" class="textbox" placeholder="Search within this folder...">
-                <button id="searchGo" class="btn small iconOnly" title="Search">
-                    <div class="icon">search</div>
-                </button>
             </div>
             <div id="fileColHeadings" class="row gap-10">
                 <div class="name flex-grow">Name</div>

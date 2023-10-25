@@ -26,11 +26,9 @@ const btnDirView = $('#dirView');
 const btnDirSelection = $('#dirSelection');
 const elFileColHeadings = $('#fileColHeadings');
 const elFiles = $('#files');
-const btnSearch = $('#search');
-const elSearchBar = $('#filterBar');
-const inputSearch = $('#inputFilter');
-const btnSearchCancel = $('#filterCancel');
-const btnSearchGo = $('#searchGo');
+const inputSearch = $('#inputNavSearch');
+const btnSearchCancel = $('#navSearchCancel');
+const btnSearchGo = $('#navSearchGo');
 const forceTileViewWidth = 720;
 /** An array of paths in the back history */
 let backPaths = [];
@@ -78,9 +76,7 @@ showDownloadPopup = (showDownloadPopup == null) ? true : (showDownloadPopup === 
 // Variables for file name navigation
 let keypressString = '';
 let keypressClearTimeout;
-// Variables for the filter bar
-let filterTimeout;
-let filterDelay = 250;
+// Variables for recursive searching
 let searchWebsocket;
 let isSearching = false;
 
@@ -561,7 +557,8 @@ const loadDirectory = async path => {
     btnDownload.disabled = true;
     btnShare.disabled = true;
     btnDirSort.disabled = true;
-    elSearchBar.style.display = 'none';
+    inputSearch.value = '';
+    isSearching = false;
     try { searchWebsocket.close(); } catch (error) {}
     // Get the directory listing
     setStatus(`Loading directory...`);
@@ -606,6 +603,7 @@ const loadDirectory = async path => {
         btnDownload.disabled = false;
         btnShare.disabled = false;
         btnDirSort.disabled = false;
+        inputSearch.placeholder = `Search within ${path.split('/').pop() || '/'}...`;
         updateDirControls();
         setStatus(`Loaded directory with ${list.length} items in ${Date.now()-loadStartTime}ms`);
     }
@@ -617,11 +615,10 @@ const searchDirectory = async(path, query) => {
     setStatus(`Starting search...`);
     document.title = `${activeConnection.name} - Searching for "${query}" in ${path}`;
     // Disable controls
+    updateDirControls();
     btnUpload.disabled = true;
     btnDirCreate.disabled = true;
     btnFileCreate.disabled = true;
-    btnDownload.disabled = true;
-    btnShare.disabled = true;
     // Remove all existing file elements
     elFiles.innerHTML = `
         <div class="heading">Folders</div>
@@ -686,41 +683,6 @@ const searchDirectory = async(path, query) => {
     });
 }
 
-const searchBarShow = () => {
-    elSearchBar.style.display = '';
-    inputSearch.focus();
-    inputSearch.select();
-}
-
-const searchBarHide = () => {
-    elSearchBar.style.display = 'none';
-    inputSearch.value = '';
-}
-
-const filterFiles = filter => {
-    filter = filter.toLowerCase();
-    clearTimeout(filterTimeout);
-    setStatus(`Filtering files in this folder...`, false, -1);
-    filterTimeout = setTimeout(() => {
-        const files = $$('.fileEntry', elFiles);
-        let shownFiles = 0;
-        let hiddenFiles = 0;
-        for (const el of files) {
-            const matches = el.dataset.name.toLowerCase().includes(filter);
-            if (matches || el.dataset.name == '..') {
-                el.style.display = '';
-                shownFiles++;
-            } else {
-                el.style.display = 'none';
-                hiddenFiles++;
-            }
-        }
-        if (hiddenFiles > 0)
-            setStatus(`Filter matched ${shownFiles} file(s)`);
-        else
-            setStatus(`Filter cleared`);
-    }, filterDelay);
-}
 
 /**
  * Generates a file list entry element with the data for a given file.
@@ -1228,6 +1190,10 @@ const updateDirControls = () => {
     btnSelectionCopyTo.disabled = true;
     btnSelectionDelete.disabled = true;
     btnSelectionPerms.disabled = true;
+    if (isSearching) {
+        btnDownload.disabled = true;
+        btnShare.disabled = true;
+    }
     btnDeselectAll.style.display = 'none';
     // When no files are selected
     if (selectedFiles.length == 0) {
@@ -1245,10 +1211,12 @@ const updateDirControls = () => {
         btnSelectionCopyTo.disabled = false;
         btnSelectionDelete.disabled = false;
         btnSelectionPerms.disabled = false;
+        btnDownload.disabled = false;
+        btnShare.disabled = false;
         btnDeselectAll.style.display = '';
     }
     // When there are files in the clipboard
-    if (selectionClipboard.length > 0) {
+    if (selectionClipboard.length > 0 && !isSearching) {
         btnSelectionPaste.disabled = false;
     }
 }
@@ -1287,8 +1255,8 @@ const selectFile = (path, deselectOthers = true, toggle = false, focus = false) 
  */
 const selectAllFiles = () => {
     const files = [...$$('.fileEntry', elFiles)];
-    files.shift();
     for (const el of files) {
+        if (el.dataset.name == '..') continue;
         el.classList.add('selected');
     }
     deselectHiddenFiles();
@@ -2438,8 +2406,6 @@ elFiles.addEventListener('contextmenu', e => {
     fileContextMenu();
 });
 
-btnSearch.addEventListener('click', searchBarShow);
-
 inputSearch.addEventListener('keydown', e => {
     if (e.key === 'Enter') {
         btnSearchGo.click();
@@ -2453,9 +2419,7 @@ btnSearchGo.addEventListener('click', () => {
 });
 
 btnSearchCancel.addEventListener('click', () => {
-    searchBarHide();
-    if (isSearching)
-        changePath(activeConnection.path);
+    if (isSearching) changePath(activeConnection.path);
 });
 
 window.addEventListener('click', e => {
@@ -2497,7 +2461,10 @@ window.addEventListener('keydown', e => {
             if (e.code === 'KeyR')
                 return () => btnGo.click();
             if (e.code === 'KeyF')
-                return () => searchBarShow();
+                return () => {
+                    inputSearch.focus();
+                    inputSearch.select();
+                }
         }
         // Shift
         if (e.shiftKey) {
