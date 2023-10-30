@@ -15,11 +15,13 @@ This line was written using the text file editor built into SFTP Browser!!
 - Show or hide hidden (dot) files
 - Switch between list and tile views
 - Download multiple files/directories as a single zip file
-- Upload files, create new files, and create directories
+- Upload files by dragging and dropping or using the button
+- Create new files and directories
 - Rename and delete files
 - Cut/copy/paste files between directories
 - Use "Move to" and "Copy to" dialogs for more contextual organization
 - Edit file permissions
+- Recursively search for files by name within a directory
 - View images, videos, and audio files in the browser
     - File size limitations apply (see [here](https://github.com/CyberGen49/sftp-browser/blob/53ad712089774c7264157d64dc94c6084950812b/web/assets/main.js#L168) - subject to change)
 - Edit text files in the browser and save directly to the server
@@ -27,7 +29,7 @@ This line was written using the text file editor built into SFTP Browser!!
 - Edit Markdown files and see a live preview
 - Full mobile support with a responsive UI
 
-## API
+## API Basics
 
 ### Authentication
 All API endpoints require a set of request headers for connecting to the target server:
@@ -59,7 +61,7 @@ Failed response example:
 
 Failed responses will always use a 400 or 500 level HTTP status code.
 
-### Endpoints
+## API Endpoints
 
 ### List files in a directory
 Endpoint: `GET /api/sftp/directories/list`
@@ -220,8 +222,9 @@ Endpoint: `PUT /api/sftp/files/copy`
 * string `pathDest`: The normalized destination path
 
 ### Edit a file's permissions
-Edit: `PUT /api/sftp/files/chmod`
 Directories are supported, but with no recursion.
+
+Endpoint: `PUT /api/sftp/files/chmod`
 
 #### Query params
 * Required string `path`: The path of the file
